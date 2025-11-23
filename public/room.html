@@ -44,7 +44,7 @@
         const playerParam = params.get('player') || 'player1';
         const nameParam = params.get('name') || '';
         const timeParam = Number(params.get('time')) || 180;
-        const levelParam = params.get('level') || 'level1';
+        const levelId = 'level1';
         const themeParam = params.get('theme') || 'rune';
 
         const [name, setName] = useState(nameParam);
@@ -64,8 +64,8 @@
         // load level files
         const [levelData, setLevelData] = useState(null);
         useEffect(()=>{
-          fetch(`/levels/${levelParam}/player1.json`).then(r=>r.json()).then(p1=>{
-            fetch(`/levels/${levelParam}/player2.json`).then(r=>r.json()).then(p2=>{
+          fetch(`/levels/${levelId}/player1.json`).then(r=>r.json()).then(p1=>{
+            fetch(`/levels/${levelId}/player2.json`).then(r=>r.json()).then(p2=>{
               setLevelData({ player1: p1, player2: p2 });
             });
           });
@@ -80,7 +80,7 @@
           if (!levelData) return;
           // load the level logic script from the level folder
           const script = document.createElement('script');
-          script.src = `/levels/${levelParam}/logic.js`;
+          script.src = `/levels/${levelId}/logic.js`;
           script.async = true;
           script.onload = () => { setLevelLogic(window.levelLogic || null); };
           document.body.appendChild(script);
@@ -372,12 +372,15 @@
                                     const isSelected = sequence && sequence.includes(i);
                                     const expected = (generatedData && generatedData.expectedSequences && generatedData.expectedSequences[riddleIndex]) || [];
                                     const isCorrect = expected && expected.includes(i);
+                                    // treat the deterministic mismatch index as an expected cell for the purposes of Q-reveal
+                                    const mismatchIdx = (generatedData && generatedData.mismatchIndices && generatedData.mismatchIndices[riddleIndex] !== undefined) ? generatedData.mismatchIndices[riddleIndex] : null;
+                                    const isExpectedOriginal = isCorrect || (mismatchIdx !== null && mismatchIdx === i);
                                     // detect label mismatch between player1 and player2 views for this cell
                                     const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || Math.sqrt((riddleContent.descriptiveObjects || riddleContent.runes || []).length) || 7;
                                     const label1 = computeLabelFor('player1', riddleIndex, i, gridSize);
                                     const label2 = computeLabelFor('player2', riddleIndex, i, gridSize);
                                     const isMismatch = (label1 !== null && label2 !== null && String(label1) !== String(label2));
-                                    const cls = 'rune' + (isSelected ? ' selected' : '') + (showCorrect && isCorrect ? (isMismatch ? ' hint-mismatch' : ' hint-correct') : '');
+                                    const cls = 'rune' + (isSelected ? ' selected' : '') + (showCorrect && isExpectedOriginal ? (isMismatch ? ' hint-mismatch' : ' hint-correct') : '');
                                     return (<div key={i} className={cls} onClick={()=>onRuneClick(i)}>{label}</div>);
                                   })}
                                 </div>
@@ -389,7 +392,7 @@
                         );
                       })()}
                       <div style={{marginTop:8}}>
-                        {!(playerParam === 'player1' && levelParam === 'level1') && (
+                        {!(playerParam === 'player1' && levelId === 'level1') && (
                           <button onClick={resetSequence}>Reset Sequence</button>
                         )}
                         {showPassword && (
@@ -399,7 +402,7 @@
                           </span>
                         )}
                         {/* Confirm button for selection-based levels (hidden for player1 level1) */}
-                        {(generatedData && generatedData.confirmRequired && !(playerParam === 'player1' && levelParam === 'level1')) && (
+                        {(generatedData && generatedData.confirmRequired && !(playerParam === 'player1' && levelId === 'level1')) && (
                           <button onClick={confirmSelection} style={{marginLeft:12}}>Confirm</button>
                         )}
                       </div>
