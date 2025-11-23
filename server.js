@@ -1,9 +1,13 @@
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Load config
+const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
 
 // Serve static files from public directory
 app.use(express.static('public'));
@@ -54,7 +58,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       border-radius: 12px; 
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       text-align: center;
-      max-width: 500px;
+      max-width: 800px;
     }
     .seed { 
       font-family: monospace; 
@@ -88,6 +92,29 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       color: #333;
       margin-top: 0;
     }
+    .game-board {
+      display: inline-grid;
+      gap: 0;
+      margin: 20px auto;
+    }
+    .cell {
+      width: 40px;
+      height: 40px;
+      background: #e8e8e8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+    }
+    .info-bar {
+      display: flex;
+      justify-content: space-between;
+      margin: 20px 0;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 6px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -98,39 +125,117 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
     
     function App() {
       const [gameStarted, setGameStarted] = useState(false);
+      const [playerPos, setPlayerPos] = useState({ x: 0, y: 0 });
       
       const gameData = {
         seed: '${hashedSeed}',
         playerNum: ${currentPlayer},
         totalPlayers: ${totalPlayers},
-        word: '${word}'
+        word: '${word}',
+        gridSize: ${config.gridSize}
+      };
+      
+      // Arrow key movement
+      useEffect(() => {
+        if (!gameStarted) return;
+        
+        const handleKeyDown = (e) => {
+          setPlayerPos(prev => {
+            let newPos = { ...prev };
+            
+            switch(e.key) {
+              case 'ArrowUp':
+                newPos.y = (prev.y - 1 + gameData.gridSize) % gameData.gridSize;
+                e.preventDefault();
+                break;
+              case 'ArrowDown':
+                newPos.y = (prev.y + 1) % gameData.gridSize;
+                e.preventDefault();
+                break;
+              case 'ArrowLeft':
+                newPos.x = (prev.x - 1 + gameData.gridSize) % gameData.gridSize;
+                e.preventDefault();
+                break;
+              case 'ArrowRight':
+                newPos.x = (prev.x + 1) % gameData.gridSize;
+                e.preventDefault();
+                break;
+            }
+            
+            return newPos;
+          });
+        };
+        
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [gameStarted, gameData.gridSize]);
+      
+      const renderBoard = () => {
+        const viewportSize = 5;
+        const halfView = Math.floor(viewportSize / 2);
+        
+        const cells = [];
+        for (let dy = -halfView; dy <= halfView; dy++) {
+          for (let dx = -halfView; dx <= halfView; dx++) {
+            // Wrap coordinates around the grid
+            const worldX = (playerPos.x + dx + gameData.gridSize) % gameData.gridSize;
+            const worldY = (playerPos.y + dy + gameData.gridSize) % gameData.gridSize;
+            
+            const isPlayer = dx === 0 && dy === 0;
+            cells.push(
+              <div key={\`\${dx}-\${dy}\`} className="cell">
+                {isPlayer ? '♞' : ''}
+              </div>
+            );
+          }
+        }
+        return cells;
       };
       
       return (
         <div className="container">
           <h1>Connect Game</h1>
           
-          <div className="seed">
-            <strong>Seed:</strong><br/>
-            {gameData.seed}
-          </div>
-          
-          <div className="player-info">
-            Player {gameData.playerNum} of {gameData.totalPlayers}
-          </div>
-          
           {!gameStarted ? (
-            <button onClick={() => setGameStarted(true)}>
-              Start Game
-            </button>
+            <>
+              <div className="seed">
+                <strong>Seed:</strong><br/>
+                {gameData.seed}
+              </div>
+              
+              <div className="player-info">
+                Player {gameData.playerNum} of {gameData.totalPlayers}
+              </div>
+              
+              <button onClick={() => setGameStarted(true)}>
+                Start Game
+              </button>
+            </>
           ) : (
-            <div style={{ marginTop: 20, color: '#28a745', fontSize: 20 }}>
-              Game started! 🎮
-            </div>
+            <>
+              <div className="info-bar">
+                <span>Player {gameData.playerNum}/{gameData.totalPlayers}</span>
+                <span>Position: ({playerPos.x}, {playerPos.y})</span>
+                <span>Grid: {gameData.gridSize}x{gameData.gridSize}</span>
+              </div>
+              
+              <div 
+                className="game-board" 
+                style={{
+                  gridTemplateColumns: \`repeat(5, 40px)\`
+                }}
+              >
+                {renderBoard()}
+              </div>
+              
+              <div style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
+                Use arrow keys to move ↑ ↓ ← →
+              </div>
+            </>
           )}
         </div>
       );
