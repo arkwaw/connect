@@ -205,6 +205,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       const [showPassword, setShowPassword] = useState(false);
       const [passwordInput, setPasswordInput] = useState('');
       const [gameWon, setGameWon] = useState(false);
+      const [enemyOnPlayer, setEnemyOnPlayer] = useState(false);
       
       const boardRef = useRef(null);
       const playerRef = useRef(null);
@@ -277,7 +278,21 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         };
         
         inputHandler.onMove = (key) => {
+          const wasEnemyOnPlayer = enemies.some(e => e.isAtPosition(player.position.x, player.position.y));
+          
           player.processKeyPress(key, board);
+          
+          // Check if player moved onto enemy or escaped from enemy after move
+          const isEnemyOnPlayer = enemies.some(e => e.isAtPosition(player.position.x, player.position.y));
+          
+          // If player just moved onto enemy (wasn't caught before, is caught now)
+          if (!wasEnemyOnPlayer && isEnemyOnPlayer) {
+            // Apply penalty immediately when player moves onto enemy
+            player.timeRemaining = Math.max(0, player.timeRemaining - gameData.enemyConfig.timePenaltyPerSecond);
+          }
+          
+          setEnemyOnPlayer(isEnemyOnPlayer);
+          
           forceUpdate({});
         };
         
@@ -319,12 +334,23 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         
         const interval = setInterval(() => {
           enemies.forEach(enemy => {
-            enemy.moveRandom(board);
+            // Only move enemy if it's not on the same position as player
+            const isOnPlayer = enemy.isAtPosition(player.position.x, player.position.y);
+            if (!isOnPlayer) {
+              enemy.moveRandom(board);
+              // Check if enemy landed on player after move
+              const nowCaught = enemy.isAtPosition(player.position.x, player.position.y);
+              if (nowCaught) {
+                setEnemyOnPlayer(true);
+                // Apply penalty immediately when caught
+                player.timeRemaining = Math.max(0, player.timeRemaining - gameData.enemyConfig.timePenaltyPerSecond);
+              }
+            }
           });
           
-          // Apply time penalty if enemy on same field as player
-          const enemyOnPlayer = enemies.some(e => e.isAtPosition(player.position.x, player.position.y));
-          if (enemyOnPlayer) {
+          // Apply time penalty every second if still caught
+          const isEnemyOnPlayer = enemies.some(e => e.isAtPosition(player.position.x, player.position.y));
+          if (isEnemyOnPlayer) {
             player.timeRemaining = Math.max(0, player.timeRemaining - gameData.enemyConfig.timePenaltyPerSecond);
           }
           
@@ -377,12 +403,14 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
               const terrainColor = board.getTerrainColor(x, y);
               const isPlayer = player.position.x === x && player.position.y === y;
               const enemyHere = enemies.find(e => e.isAtPosition(x, y));
+              const isPlayerCaught = isPlayer && enemies.some(e => e.isAtPosition(player.position.x, player.position.y));
+              const bgColor = isPlayerCaught ? '#ff0000' : terrainColor;
               
               cells.push(
                 <div 
                   key={\`\${x}-\${y}\`} 
                   className="cell"
-                  style={{ backgroundColor: terrainColor, width: 30, height: 30, fontSize: 20 }}
+                  style={{ backgroundColor: bgColor, width: 30, height: 30, fontSize: 20 }}
                 >
                   {isPlayer ? player.texture : enemyHere ? enemyHere.texturePatrol : ''}
                 </div>
@@ -400,12 +428,14 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
               const terrainColor = board.getTerrainColor(worldX, worldY);
               const isPlayer = dx === 0 && dy === 0;
               const enemyHere = enemies.find(e => e.isAtPosition(worldX, worldY));
+              const isPlayerCaught = isPlayer && enemies.some(e => e.isAtPosition(player.position.x, player.position.y));
+              const bgColor = isPlayerCaught ? '#ff0000' : terrainColor;
               
               cells.push(
                 <div 
                   key={\`\${dx}-\${dy}\`} 
                   className="cell"
-                  style={{ backgroundColor: terrainColor }}
+                  style={{ backgroundColor: bgColor }}
                 >
                   {isPlayer ? player.texture : enemyHere ? enemyHere.texturePatrol : ''}
                 </div>
