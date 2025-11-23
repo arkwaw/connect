@@ -189,6 +189,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       const [showPassword, setShowPassword] = useState(false);
       const [passwordInput, setPasswordInput] = useState('');
       const [gameWon, setGameWon] = useState(false);
+      const [collectedPassphrases, setCollectedPassphrases] = useState([]);
       
       const gameData = {
         seed: '${hashedSeed}',
@@ -297,10 +298,17 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         const currentFieldIndex = playerPos.y * gameData.gridSize + playerPos.x;
         // Check all other players' passwords for this field
         for (let p = 1; p <= gameData.totalPlayers; p++) {
-          if (p !== gameData.playerNum) {
+          if (p !== gameData.playerNum && !collectedPassphrases.includes(p)) {
             const expectedPassword = gameData.passwordMap[currentFieldIndex][p];
             if (passwordInput.toUpperCase() === expectedPassword) {
-              setGameWon(true);
+              const newCollected = [...collectedPassphrases, p];
+              setCollectedPassphrases(newCollected);
+              setPasswordInput('');
+              
+              // Win if collected all other players' passphrases
+              if (newCollected.length >= gameData.totalPlayers - 1) {
+                setGameWon(true);
+              }
               return;
             }
           }
@@ -403,7 +411,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
                 You Win! 🎉
               </div>
               <div style={{ marginTop: 10, fontSize: 18 }}>
-                You found your teammate on the same field!
+                You collected all {gameData.totalPlayers - 1} passphrases!
               </div>
               <button onClick={() => window.location.reload()} style={{ marginTop: 20 }}>
                 Play Again
@@ -423,6 +431,12 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
                   <div style={{ textAlign: 'center', fontSize: 18, fontWeight: 'bold', marginTop: 10, marginBottom: 10 }}>
                     {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, '0')}
                   </div>
+                  
+                  {collectedPassphrases.length > 0 && (
+                    <div style={{ textAlign: 'center', fontSize: 12, color: '#28a745', marginBottom: 5 }}>
+                      Collected: {collectedPassphrases.length}/{gameData.totalPlayers - 1}
+                    </div>
+                  )}
                   
                   {showPassword && (
                     <div style={{ 
