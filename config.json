@@ -1,3 +1,21 @@
 {
-  "gridSize": 10
+  "gridSize": 10,
+  "terrain": {
+    "grass": {
+      "color": "#7bc96f",
+      "percentage": 85
+    },
+    "mud": {
+      "color": "#8b6f47",
+      "percentage": 5
+    },
+    "sand": {
+      "color": "#e3c16f",
+      "percentage": 5
+    },
+    "rocks": {
+      "color": "#9c9c9c",
+      "percentage": 5
+    }
+  }
 }

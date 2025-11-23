@@ -34,6 +34,32 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   const seedString = `${bucket}-${word}`;
   const hashedSeed = crypto.createHash('sha256').update(seedString).digest('hex');
   
+  // Generate terrain map from seed
+  const terrainTypes = Object.keys(config.terrain);
+  const terrainWeights = terrainTypes.map(type => config.terrain[type].percentage);
+  const terrainColors = terrainTypes.map(type => config.terrain[type].color);
+  
+  // Create weighted array for terrain selection
+  const weightedTerrain = [];
+  terrainTypes.forEach((type, idx) => {
+    for (let i = 0; i < terrainWeights[idx]; i++) {
+      weightedTerrain.push(type);
+    }
+  });
+  
+  // Generate deterministic terrain for each cell
+  const terrainMap = [];
+  for (let i = 0; i < config.gridSize * config.gridSize; i++) {
+    const cellSeed = crypto.createHash('sha256')
+      .update(`${hashedSeed}-${i}`)
+      .digest('hex');
+    const index = parseInt(cellSeed.substring(0, 8), 16) % weightedTerrain.length;
+    terrainMap.push(weightedTerrain[index]);
+  }
+  
+  const terrainData = JSON.stringify(terrainMap);
+  const terrainColorsData = JSON.stringify(config.terrain);
+  
   // Send HTML with embedded data
   res.send(`
 <!DOCTYPE html>
@@ -136,7 +162,9 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         playerNum: ${currentPlayer},
         totalPlayers: ${totalPlayers},
         word: '${word}',
-        gridSize: ${config.gridSize}
+        gridSize: ${config.gridSize},
+        terrainMap: ${terrainData},
+        terrainColors: ${terrainColorsData}
       };
       
       // Arrow key movement
@@ -184,10 +212,18 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
             // Wrap coordinates around the grid
             const worldX = (playerPos.x + dx + gameData.gridSize) % gameData.gridSize;
             const worldY = (playerPos.y + dy + gameData.gridSize) % gameData.gridSize;
+            const cellIndex = worldY * gameData.gridSize + worldX;
+            
+            const terrainType = gameData.terrainMap[cellIndex];
+            const terrainColor = gameData.terrainColors[terrainType]?.color || '#e8e8e8';
             
             const isPlayer = dx === 0 && dy === 0;
             cells.push(
-              <div key={\`\${dx}-\${dy}\`} className="cell">
+              <div 
+                key={\`\${dx}-\${dy}\`} 
+                className="cell"
+                style={{ backgroundColor: terrainColor }}
+              >
                 {isPlayer ? '♞' : ''}
               </div>
             );
