@@ -193,6 +193,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   <script src="/js/Board.js"></script>
   <script src="/js/Player.js"></script>
   <script src="/js/EnemyPatrol.js"></script>
+  <script src="/js/InputHandler.js"></script>
   
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
@@ -208,9 +209,9 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       const boardRef = useRef(null);
       const playerRef = useRef(null);
       const enemiesRef = useRef([]);
+      const inputHandlerRef = useRef(null);
       
       const [, forceUpdate] = useState({});
-      const keysPressed = useRef(new Set());
       const moveIntervalRef = useRef(null);
       
       const gameData = {
@@ -247,62 +248,46 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
           new EnemyPatrol(idx, pos)
         );
         
+        inputHandlerRef.current = new InputHandler();
+        
         forceUpdate({});
       }, []);
       
       const player = playerRef.current;
       const board = boardRef.current;
       const enemies = enemiesRef.current;
+      const inputHandler = inputHandlerRef.current;
       
-      // Arrow key movement with consistent timing
+      // Setup input handlers
       useEffect(() => {
-        if (!gameStarted || gameWon || !player) return;
+        if (!gameStarted || gameWon || !player || !inputHandler) return;
         
-        const handleKeyDown = (e) => {
-          // Q key to show full map
-          if (e.key === 'q' || e.key === 'Q') {
-            setShowFullMap(true);
-            setTimeout(() => setShowFullMap(false), 3000);
-            e.preventDefault();
-            return;
-          }
-          
-          // Space key to reveal password
-          if (e.key === ' ') {
-            if (!showPassword) {
-              // Apply time penalty
-              player.timeRemaining = Math.max(0, player.timeRemaining - gameData.passwordRevealSeconds);
-              setShowPassword(true);
-              forceUpdate({});
-            }
-            e.preventDefault();
-            return;
-          }
-          
-          // Track arrow key presses
-          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            keysPressed.current.add(e.key);
-            e.preventDefault();
+        inputHandler.setGameActive(true);
+        
+        inputHandler.onShowFullMap = () => {
+          setShowFullMap(true);
+          setTimeout(() => setShowFullMap(false), 3000);
+        };
+        
+        inputHandler.onRevealPassword = () => {
+          if (!showPassword) {
+            player.applyTimePenalty(gameData.passwordRevealSeconds);
+            setShowPassword(true);
+            forceUpdate({});
           }
         };
         
-        const handleKeyUp = (e) => {
-          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            keysPressed.current.delete(e.key);
-          }
-        };
+        inputHandler.attach();
         
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
         return () => {
-          window.removeEventListener('keydown', handleKeyDown);
-          window.removeEventListener('keyup', handleKeyUp);
+          inputHandler.detach();
+          inputHandler.setGameActive(false);
         };
-      }, [gameStarted, gameWon, gameData.passwordRevealSeconds, showPassword]);
+      }, [gameStarted, gameWon, showPassword, player, inputHandler, gameData.passwordRevealSeconds]);
       
       // Process movement at consistent intervals
       useEffect(() => {
-        if (!gameStarted || gameWon || gameLost || !player || !board) {
+        if (!gameStarted || gameWon || gameLost || !player || !board || !inputHandler) {
           if (moveIntervalRef.current) {
             clearInterval(moveIntervalRef.current);
             moveIntervalRef.current = null;
@@ -311,27 +296,10 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         }
         
         moveIntervalRef.current = setInterval(() => {
-          if (keysPressed.current.size === 0) return;
+          const key = inputHandler.getActiveKey();
+          if (!key) return;
           
-          // Get the most recently pressed key (last in the set)
-          const keys = Array.from(keysPressed.current);
-          const key = keys[keys.length - 1];
-          
-          switch(key) {
-            case 'ArrowUp':
-              player.move(0, -1, board);
-              break;
-            case 'ArrowDown':
-              player.move(0, 1, board);
-              break;
-            case 'ArrowLeft':
-              player.move(-1, 0, board);
-              break;
-            case 'ArrowRight':
-              player.move(1, 0, board);
-              break;
-          }
-          
+          player.processKeyPress(key, board);
           forceUpdate({});
         }, gameData.moveDelayMs);
         
@@ -341,7 +309,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
             moveIntervalRef.current = null;
           }
         };
-      }, [gameStarted, gameWon, gameLost, player, gameData.moveDelayMs]);
+      }, [gameStarted, gameWon, gameLost, player, inputHandler, gameData.moveDelayMs]);
       
       // Hide password when player moves
       useEffect(() => {
