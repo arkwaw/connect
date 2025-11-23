@@ -19,6 +19,7 @@
     .board.active-red{border:3px solid #f7a6a6}
     .board.active-blue{border:3px solid #a6c8f7}
     .rune.hint-correct{box-shadow:0 0 0 4px rgba(120,200,255,0.35), 0 6px 12px rgba(0,0,0,0.08);transform:translateY(-2px)}
+    .rune.hint-mismatch{box-shadow:0 0 0 6px rgba(255,80,80,0.35), 0 6px 12px rgba(0,0,0,0.12);transform:translateY(-2px)}
     .row-indicator-col{display:flex;flex-direction:column;gap:8px;margin-right:12px}
     .row-indicator{width:20px;height:60px;border-radius:6px;background:transparent;border:1px solid #ddd}
     .row-indicator.green{background:#a3e9a8;border-color:#7fcf82}
@@ -49,10 +50,12 @@
         const [name, setName] = useState(nameParam);
         const [status, setStatus] = useState('ready');
         const [riddleIndex, setRiddleIndex] = useState(0);
+        const [round, setRound] = useState(0);
         const [riddleContent, setRiddleContent] = useState(null);
         const [sequence, setSequence] = useState([]);
         const [showPassword, setShowPassword] = useState(false);
         const [showCorrect, setShowCorrect] = useState(false);
+        const [passwordInput, setPasswordInput] = useState('');
         const [timerEndAt, setTimerEndAt] = useState(null);
         const [timerRemaining, setTimerRemaining] = useState(null);
         
@@ -88,9 +91,9 @@
           if (!levelLogic || !seedParam || !levelData || !themes) return;
           const seed = decodeURIComponent(seedParam);
           const themeList = (themes && themes[themeParam]) || [];
-          const gen = levelLogic.prepare({ seed, levelData: levelData.player1, themeList });
+          const gen = levelLogic.prepare({ seed, levelData: levelData.player1, themeList, round });
           setGeneratedData(gen);
-        }, [levelLogic, seedParam, levelData, themes, themeParam]);
+        }, [levelLogic, seedParam, levelData, themes, themeParam, round]);
 
         // load themes config
         useEffect(()=>{
@@ -101,6 +104,7 @@
         function startRiddle(idx){
           if (!levelData) return;
           setRiddleIndex(idx);
+          setRound(0);
           const content = (playerParam === 'player1') ? levelData.player1[idx] : levelData.player2[idx];
           // if player2, craft hint based on generated data
           if (playerParam === 'player2') {
@@ -128,6 +132,9 @@
           setStatus('playing');
           
         }
+
+        // clear password input when riddle changes
+        useEffect(()=>{ setPasswordInput(''); }, [riddleIndex]);
 
         // countdown
         useEffect(()=>{
@@ -166,6 +173,23 @@
           };
         }, [playerParam, generatedData]);
 
+      // helper: produce the label that would be shown for a given player and cell
+      function computeLabelFor(player, ridx, i, gridSize) {
+        if (!generatedData || !levelData) return null;
+        // prefer per-player generated labels when available
+        if (player === 'player2' && generatedData.labelsPerRiddlePlayer2 && generatedData.labelsPerRiddlePlayer2[ridx]) {
+          const arr2 = generatedData.labelsPerRiddlePlayer2[ridx] || [];
+          if (arr2[i]) return arr2[i];
+        }
+        const labelsArr = (generatedData.labelsPerRiddle && generatedData.labelsPerRiddle[ridx]) || [];
+        if (labelsArr && labelsArr[i]) return labelsArr[i];
+        // fallback to per-player emoji or theme
+        const themeList = (themes && themes[themeParam]) || [];
+        const rc = (levelData.player1 && levelData.player1[ridx]) || {};
+        const emojiList = (rc.emoji && rc.emoji.length) ? rc.emoji : themeList;
+        return (emojiList && emojiList[i]) ? emojiList[i] : (`#${i+1}`);
+      }
+
         // handle timeout
         useEffect(()=>{
           if (timerRemaining === null) return;
@@ -197,27 +221,46 @@
         function submitAnswer(){
           if (!levelData) return;
           // reading from text input (for non-selection riddles)
-          const val = (answerRef.current && answerRef.current.value || '').trim();
+          const val = (arguments.length && typeof arguments[0] === 'string') ? arguments[0].trim() : (answerRef.current && answerRef.current.value || '').trim();
           // if level logic present and this is a text submission, delegate
           if (levelLogic && generatedData && val) {
             const ok = levelLogic.submitAnswer({ riddleIndex, generated: generatedData, levelData: levelData.player1, sequence }, val);
             if (ok) {
-              const next = riddleIndex + 1;
-              if (next < levelData.player1.length) startRiddle(next);
-              else { setStatus('finished'); }
+              // if in progressive rounds, increase round first (stay on same riddle)
+              if (round < 3) {
+                setRound(r => r + 1);
+                setSequence([]);
+                setShowPassword(false);
+                setTimerEndAt(Date.now() + timeParam*1000);
+                setStatus('playing');
+              } else {
+                const next = riddleIndex + 1;
+                if (next < levelData.player1.length) startRiddle(next);
+                else { setStatus('finished'); }
+              }
             }
             if (answerRef.current) answerRef.current.value = '';
+            setPasswordInput('');
             return;
           }
           // fallback simple check when no levelLogic
           const expectedAnswer = (generatedData && generatedData.chosenAnswers && generatedData.chosenAnswers[riddleIndex]) || ((levelData.player1[riddleIndex].answer || '').toLowerCase());
           const given = val.toLowerCase();
           if (expectedAnswer && val && (given === 'test' || given === expectedAnswer)) {
-            const next = riddleIndex + 1;
-            if (next < levelData.player1.length) startRiddle(next);
-            else { setStatus('finished'); }
+            if (round < 3) {
+              setRound(r => r + 1);
+              setSequence([]);
+              setShowPassword(false);
+              setTimerEndAt(Date.now() + timeParam*1000);
+              setStatus('playing');
+            } else {
+              const next = riddleIndex + 1;
+              if (next < levelData.player1.length) startRiddle(next);
+              else { setStatus('finished'); }
+            }
           }
           if (answerRef.current) answerRef.current.value = '';
+          setPasswordInput('');
         }
 
         function confirmSelection(){
@@ -244,9 +287,20 @@
         }
 
         function continueNext(){
-          // advance to next riddle when password was revealed
-          const next = riddleIndex + 1;
+          // advance to next round/level: if current round < 3 increase round (bigger grid), otherwise go to next riddle
           if (!levelData) return;
+          if (round < 3) {
+            // increase round to get bigger grid for same riddle
+            setRound(r => r + 1);
+            // reset selection and hide password for next sub-round
+            setSequence([]);
+            setShowPassword(false);
+            // restart timer for the new sub-round
+            setTimerEndAt(Date.now() + timeParam*1000);
+            setStatus('playing');
+            return;
+          }
+          const next = riddleIndex + 1;
           if (next < levelData.player1.length) startRiddle(next);
           else { setStatus('finished'); }
         }
@@ -269,22 +323,25 @@
                   riddleContent && (
                     <div>
                       {(() => {
-                          const objs = (riddleContent.descriptiveObjects || riddleContent.runes || []).slice();
+                          const allObjs = (riddleContent.descriptiveObjects || riddleContent.runes || []).slice();
+                          // gridSize is provided by generatedData (prepare) or inferred
+                          const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || Math.sqrt(allObjs.length) || 7;
+                          const objs = allObjs.slice(0, gridSize * gridSize);
                           const themeList = (themes && themes[themeParam]) || [];
                           const emojiList = (riddleContent.emoji && riddleContent.emoji.length) ? riddleContent.emoji : themeList;
                           const boardClass = 'board grid';
                           const requiredCount = (generatedData && generatedData.expectedSequences && generatedData.expectedSequences[riddleIndex]) ? generatedData.expectedSequences[riddleIndex].length : (riddleContent.sequenceLength || 0);
                           // compute per-column color indicator from colColorMaps
                           const colMap = (generatedData && generatedData.colColorMaps && generatedData.colColorMaps[riddleIndex]) || [];
-                          const colColors = Array.from({length:7}, (_,c)=>{
-                            for (let j = c; j < Math.min(colMap.length, 49); j += 7) {
+                          const colColors = Array.from({length:gridSize}, (_,c)=>{
+                            for (let j = c; j < Math.min(colMap.length, objs.length); j += gridSize) {
                               if (colMap[j]) return colMap[j];
                             }
                             return null;
                           });
                           const rowMap = (generatedData && generatedData.rowColorMaps && generatedData.rowColorMaps[riddleIndex]) || [];
-                          const rowColors = Array.from({length:7}, (_,r)=>{
-                            for (let j = r*7; j < Math.min(r*7+7, rowMap.length); j++) {
+                          const rowColors = Array.from({length:gridSize}, (_,r)=>{
+                            for (let j = r*gridSize; j < Math.min(r*gridSize+gridSize, rowMap.length); j++) {
                               if (rowMap[j]) return rowMap[j];
                             }
                             return null;
@@ -292,7 +349,7 @@
                         return (
                           <div>
                             <div style={{display:'flex',justifyContent:'center',marginBottom:8}}>
-                              <div style={{width: (7*60 + 8*6) }}>
+                              <div style={{width: (gridSize*60 + (gridSize-1)*8) }}>
                                 <div style={{display:'flex',gap:8,justifyContent:'center'}}>
                                   {colColors.map((c,ci)=> (
                                     <div key={ci} className={"row-indicator" + (c ? (' ' + c) : '')} style={{width:60,height:20,borderRadius:6}} title={c ? (c + ' column') : 'no color'} />
@@ -302,20 +359,25 @@
                             </div>
 
                             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'center'}}>
-                              <div style={{display:'flex',flexDirection:'column',height:(7*60 + 8*6),marginRight:12,justifyContent:'center',gap:8}}>
+                              <div style={{display:'flex',flexDirection:'column',height:(gridSize*60 + (gridSize-1)*8),marginRight:12,justifyContent:'center',gap:8}}>
                                 {rowColors.map((c,ri)=> (
                                   <div key={ri} className={"row-indicator" + (c ? (' ' + c) : '')} style={{width:20,height:60,borderRadius:6}} title={c ? (c + ' row') : 'no color'} />
                                 ))}
                               </div>
                               <div>
-                                <div className={boardClass}>
+                                <div className={boardClass} style={{gridTemplateColumns: `repeat(${gridSize},60px)`, gridAutoRows: '60px'}}>
                                   {objs.map((r,i)=> {
-                                    const seedLabel = (generatedData && generatedData.labelsPerRiddle && generatedData.labelsPerRiddle[riddleIndex] && generatedData.labelsPerRiddle[riddleIndex][i]);
+                                    const seedLabel = computeLabelFor('player1', riddleIndex, i, gridSize);
                                     const label = seedLabel || ((r && r.label) ? r.label : (emojiList && emojiList[i]) ? emojiList[i] : '?');
                                     const isSelected = sequence && sequence.includes(i);
                                     const expected = (generatedData && generatedData.expectedSequences && generatedData.expectedSequences[riddleIndex]) || [];
                                     const isCorrect = expected && expected.includes(i);
-                                    const cls = 'rune' + (isSelected ? ' selected' : '') + (showCorrect && isCorrect ? ' hint-correct' : '');
+                                    // detect label mismatch between player1 and player2 views for this cell
+                                    const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || Math.sqrt((riddleContent.descriptiveObjects || riddleContent.runes || []).length) || 7;
+                                    const label1 = computeLabelFor('player1', riddleIndex, i, gridSize);
+                                    const label2 = computeLabelFor('player2', riddleIndex, i, gridSize);
+                                    const isMismatch = (label1 !== null && label2 !== null && String(label1) !== String(label2));
+                                    const cls = 'rune' + (isSelected ? ' selected' : '') + (showCorrect && isCorrect ? (isMismatch ? ' hint-mismatch' : ' hint-correct') : '');
                                     return (<div key={i} className={cls} onClick={()=>onRuneClick(i)}>{label}</div>);
                                   })}
                                 </div>
@@ -350,16 +412,18 @@
                       {/* show objects grid for player2 and highlight expected ones */}
                       {generatedData ? (
                         (() => {
-                          const objs = (levelData.player1[riddleIndex].descriptiveObjects || levelData.player1[riddleIndex].runes || []).slice();
+                          const allObjs = (levelData.player1[riddleIndex].descriptiveObjects || levelData.player1[riddleIndex].runes || []).slice();
+                          const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || Math.sqrt(allObjs.length) || 7;
+                          const objs = allObjs.slice(0, gridSize * gridSize);
                           const themeList = (themes && themes[themeParam]) || [];
                           const emojiList = (levelData.player1[riddleIndex].emoji && levelData.player1[riddleIndex].emoji.length) ? levelData.player1[riddleIndex].emoji : themeList;
                           const colorMap = (generatedData.colorMaps && generatedData.colorMaps[riddleIndex]) || [];
                           const activeColor = (generatedData && generatedData.activeColors && generatedData.activeColors[riddleIndex]) || null;
                           const boardClass2 = 'board grid' + (activeColor ? (' active-' + activeColor) : '');
                           return (
-                            <div className={boardClass2}>
+                            <div className={boardClass2} style={{gridTemplateColumns: `repeat(${gridSize},60px)`, gridAutoRows: '60px'}}>
                               {objs.map((r,i)=>{
-                                const seedLabel = (generatedData && generatedData.labelsPerRiddle && generatedData.labelsPerRiddle[riddleIndex] && generatedData.labelsPerRiddle[riddleIndex][i]);
+                                const seedLabel = computeLabelFor('player2', riddleIndex, i, gridSize);
                                 const label = seedLabel || ((r && r.label) ? r.label : (emojiList && emojiList[i]) ? emojiList[i] : '?');
                                 const color = colorMap && colorMap[i];
                                 const cls = "rune" + (color ? (' ' + color) : '');
@@ -380,8 +444,28 @@
                 <div style={{marginTop:12}}>
                   {!(playerParam === 'player1' && riddleContent && riddleContent.sequenceLength) ? (
                     <span>
-                      <label>Answer: <input ref={answerRef} /></label>
-                      <button onClick={submitAnswer} style={{marginLeft:8}}>Submit</button>
+                      {playerParam === 'player2' ? (
+                        // Player 2: controlled password input + Continue button (requires correct password)
+                        <span>
+                          <label>Password: <input value={passwordInput} onChange={e=>setPasswordInput(e.target.value)} /></label>
+                          <button
+                            onClick={()=>submitAnswer(passwordInput)}
+                            style={{marginLeft:8}}
+                            disabled={!(() => {
+                              const val = (passwordInput || '').trim().toLowerCase();
+                              if (!val) return false;
+                              if (val === 'test') return true;
+                              const expectedAnswer = (generatedData && generatedData.chosenAnswers && generatedData.chosenAnswers[riddleIndex]) || ((levelData && levelData.player1 && levelData.player1[riddleIndex] && levelData.player1[riddleIndex].answer) || '').toLowerCase();
+                              return expectedAnswer && val === String(expectedAnswer).toLowerCase();
+                            })()}
+                          >Continue</button>
+                        </span>
+                      ) : (
+                        <span>
+                          <label>Answer: <input ref={answerRef} /></label>
+                          <button onClick={submitAnswer} style={{marginLeft:8}}>Submit</button>
+                        </span>
+                      )}
                     </span>
                   ) : null}
                 </div>

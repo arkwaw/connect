@@ -39,26 +39,34 @@
     const activeColors = [];
     const chosenAnswers = [];
     const labelsPerRiddle = [];
+    const labelsPerRiddlePlayer2 = [];
+    const mismatchIndices = [];
+    const gridSizes = [];
+    const roundOffset = (opts && typeof opts.round === 'number') ? Math.max(0, Math.floor(opts.round)) : 0;
     for (let ri = 0; ri < levelData.length; ri++) {
       const riddle = levelData[ri];
-      const objCount = (riddle.descriptiveObjects && riddle.descriptiveObjects.length) || (riddle.runes && riddle.runes.length) || 0;
+      // grid grows per round: start 4x4, then 5x5, 6x6, up to 7x7
+      const gridSize = Math.min(4 + roundOffset + ri, 7);
+      const objCount = gridSize * gridSize;
+      gridSizes[ri] = gridSize;
       const prng = mulberry32((baseSeed + ri) >>> 0);
 
       // 1) build player2's random color map: choose 21 distinct positions and assign 7 green, 7 red, 7 blue
       const indices = Array.from({length: objCount}, (_,i)=>i);
       const shuffled = seededShuffle(indices, prng);
-      const pick21 = shuffled.slice(0, Math.min(21, shuffled.length));
+      // choose 3*gridSize positions for player2 (equal groups per color)
+      const pickCount = Math.min(3 * gridSize, shuffled.length);
+      const pickN = shuffled.slice(0, pickCount);
       const player2Map = Array.from({length: objCount}, ()=>null);
-      // assign colors in blocks of 7
-      for (let k = 0; k < pick21.length; k++) {
-        const i = pick21[k];
-        if (k < 7) player2Map[i] = 'green';
-        else if (k < 14) player2Map[i] = 'red';
+      for (let k = 0; k < pickN.length; k++) {
+        const i = pickN[k];
+        if (k < gridSize) player2Map[i] = 'green';
+        else if (k < 2 * gridSize) player2Map[i] = 'red';
         else player2Map[i] = 'blue';
       }
 
       // 2) choose three distinct columns for player1 column-highlights (grid is 7x7 columns 0..6)
-      const cols = Array.from({length:7}, (_,i)=>i);
+      const cols = Array.from({length:gridSize}, (_,i)=>i);
       const colPrng = mulberry32((baseSeed + ri + 98765) >>> 0);
       const colShuffle = seededShuffle(cols, colPrng);
       const chosenCols = colShuffle.slice(0,3);
@@ -66,14 +74,14 @@
 
       const player1ColMap = Array.from({length: objCount}, ()=>null);
       for (let i = 0; i < objCount; i++) {
-        const col = i % 7;
+        const col = i % gridSize;
         if (col === colorForCol.green) player1ColMap[i] = 'green';
         else if (col === colorForCol.red) player1ColMap[i] = 'red';
         else if (col === colorForCol.blue) player1ColMap[i] = 'blue';
       }
 
       // 3) choose three distinct rows for player1 row-highlights (grid is 7x7 rows 0..6)
-      const rows = Array.from({length:7}, (_,i)=>i);
+      const rows = Array.from({length:gridSize}, (_,i)=>i);
       const rowPrng = mulberry32((baseSeed + ri + 192837) >>> 0);
       const rowShuffle = seededShuffle(rows, rowPrng);
       const chosenRows = rowShuffle.slice(0,3);
@@ -81,7 +89,7 @@
 
       const player1RowMap = Array.from({length: objCount}, ()=>null);
       for (let i = 0; i < objCount; i++) {
-        const row = Math.floor(i / 7);
+        const row = Math.floor(i / gridSize);
         if (row === colorForRow.green) player1RowMap[i] = 'green';
         else if (row === colorForRow.red) player1RowMap[i] = 'red';
         else if (row === colorForRow.blue) player1RowMap[i] = 'blue';
@@ -120,6 +128,27 @@
       expectedSequences[ri] = expected;
       activeColors[ri] = null;
       labelsPerRiddle[ri] = labels;
+      // create a player2-specific labels array and optionally introduce a mismatch
+      const labelsPlayer2 = labels.slice();
+      let mismatchIndex = null;
+      if (expected && expected.length > 0) {
+        // pick one expected index to corrupt for player2 so players see different objects
+        const pickIdx = Math.floor(prng() * expected.length);
+        mismatchIndex = expected[pickIdx];
+        // pick an alternate label (rotate theme list by +1 or use a placeholder)
+        if (themeList && themeList.length) {
+          const alt = themeList[(mismatchIndex + 1) % themeList.length];
+          labelsPlayer2[mismatchIndex] = alt;
+        } else {
+          labelsPlayer2[mismatchIndex] = ('#' + (mismatchIndex+1) + '*');
+        }
+      }
+      labelsPerRiddlePlayer2[ri] = labelsPlayer2;
+
+      // record mismatch index and exclude it from the required expected sequence for player1
+      mismatchIndices[ri] = mismatchIndex;
+      const expectedFiltered = (expected && expected.length) ? expected.filter(idx => idx !== mismatchIndex) : expected;
+      expectedSequences[ri] = expectedFiltered;
 
       // choose answer deterministically from candidates (kept for backward compat)
       const candidates = (riddle.candidates && riddle.candidates.slice()) || [];
@@ -131,7 +160,7 @@
       chosenAnswers[ri] = chosen;
     }
     // reveal is automatic when selection matches expected set
-    return { colorMaps, colColorMaps, rowColorMaps, expectedSequences, activeColors, chosenAnswers, labelsPerRiddle, confirmRequired: false };
+    return { colorMaps, colColorMaps, rowColorMaps, gridSizes, expectedSequences, activeColors, chosenAnswers, labelsPerRiddle, labelsPerRiddlePlayer2, mismatchIndices, confirmRequired: false };
   }
 
   // onRuneClick: given current sequence and riddle index, produce new sequence + reveal flag
@@ -149,11 +178,15 @@
     }
     // determine if selection completes the expected set (order-independent)
     const expected = (gen.expectedSequences && gen.expectedSequences[idx]) || [];
+    const mismatch = (gen.mismatchIndices && gen.mismatchIndices[idx] !== undefined) ? gen.mismatchIndices[idx] : null;
+    // ignore the mismatch index when checking completion (player1 should not be required to select it)
+    const expectedToCheck = expected && expected.length ? expected.filter(v => v !== mismatch) : expected;
+    const seqToCheck = seq.slice().filter(v => v !== mismatch);
     let reveal = false;
-    if (Array.isArray(expected) && expected.length > 0 && seq.length === expected.length) {
+    if (Array.isArray(expectedToCheck) && expectedToCheck.length > 0 && seqToCheck.length === expectedToCheck.length) {
       // compare as sets
-      const sset = new Set(seq.slice().sort((a,b)=>a-b));
-      const eset = new Set(expected.slice().sort((a,b)=>a-b));
+      const sset = new Set(seqToCheck.slice().sort((a,b)=>a-b));
+      const eset = new Set(expectedToCheck.slice().sort((a,b)=>a-b));
       if (sset.size === eset.size) {
         let all = true;
         for (const v of sset) if (!eset.has(v)) { all = false; break; }
@@ -182,9 +215,13 @@
     // otherwise, compare sequence to expectedSequences (order-independent set match)
     const expectedSeq = (gen.expectedSequences && gen.expectedSequences[idx]) || [];
     if (!Array.isArray(expectedSeq) || expectedSeq.length === 0) return false;
-    if (seq.length !== expectedSeq.length) return false;
-    const sset = new Set(seq.slice().sort((a,b)=>a-b));
-    const eset = new Set(expectedSeq.slice().sort((a,b)=>a-b));
+    const mismatch = (gen.mismatchIndices && gen.mismatchIndices[idx] !== undefined) ? gen.mismatchIndices[idx] : null;
+    // ignore mismatch when validating
+    const expectedToCheck = expectedSeq.filter(v => v !== mismatch);
+    const seqToCheck = seq.slice().filter(v => v !== mismatch);
+    if (seqToCheck.length !== expectedToCheck.length) return false;
+    const sset = new Set(seqToCheck.slice().sort((a,b)=>a-b));
+    const eset = new Set(expectedToCheck.slice().sort((a,b)=>a-b));
     if (sset.size !== eset.size) return false;
     for (const v of sset) if (!eset.has(v)) return false;
     return true;
