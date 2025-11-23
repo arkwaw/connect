@@ -212,7 +212,6 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       const inputHandlerRef = useRef(null);
       
       const [, forceUpdate] = useState({});
-      const moveIntervalRef = useRef(null);
       
       const gameData = {
         seed: '${hashedSeed}',
@@ -277,39 +276,18 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
           }
         };
         
+        inputHandler.onMove = (key) => {
+          player.processKeyPress(key, board);
+          forceUpdate({});
+        };
+        
         inputHandler.attach();
         
         return () => {
           inputHandler.detach();
           inputHandler.setGameActive(false);
         };
-      }, [gameStarted, gameWon, showPassword, player, inputHandler, gameData.passwordRevealSeconds]);
-      
-      // Process movement at consistent intervals
-      useEffect(() => {
-        if (!gameStarted || gameWon || gameLost || !player || !board || !inputHandler) {
-          if (moveIntervalRef.current) {
-            clearInterval(moveIntervalRef.current);
-            moveIntervalRef.current = null;
-          }
-          return;
-        }
-        
-        moveIntervalRef.current = setInterval(() => {
-          const key = inputHandler.getActiveKey();
-          if (!key) return;
-          
-          player.processKeyPress(key, board);
-          forceUpdate({});
-        }, gameData.moveDelayMs);
-        
-        return () => {
-          if (moveIntervalRef.current) {
-            clearInterval(moveIntervalRef.current);
-            moveIntervalRef.current = null;
-          }
-        };
-      }, [gameStarted, gameWon, gameLost, player, inputHandler, gameData.moveDelayMs]);
+      }, [gameStarted, gameWon, showPassword, player, board, inputHandler, gameData.passwordRevealSeconds]);
       
       // Hide password when player moves
       useEffect(() => {
