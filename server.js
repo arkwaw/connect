@@ -156,6 +156,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
     function App() {
       const [gameStarted, setGameStarted] = useState(false);
       const [playerPos, setPlayerPos] = useState({ x: 0, y: 0 });
+      const [showFullMap, setShowFullMap] = useState(false);
       
       const gameData = {
         seed: '${hashedSeed}',
@@ -172,6 +173,14 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         if (!gameStarted) return;
         
         const handleKeyDown = (e) => {
+          // Q key to show full map
+          if (e.key === 'q' || e.key === 'Q') {
+            setShowFullMap(true);
+            setTimeout(() => setShowFullMap(false), 3000);
+            e.preventDefault();
+            return;
+          }
+          
           setPlayerPos(prev => {
             let newPos = { ...prev };
             
@@ -203,32 +212,57 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       }, [gameStarted, gameData.gridSize]);
       
       const renderBoard = () => {
-        const viewportSize = 5;
+        const viewportSize = showFullMap ? gameData.gridSize : 5;
         const halfView = Math.floor(viewportSize / 2);
         
         const cells = [];
-        for (let dy = -halfView; dy <= halfView; dy++) {
-          for (let dx = -halfView; dx <= halfView; dx++) {
-            // Wrap coordinates around the grid
-            const worldX = (playerPos.x + dx + gameData.gridSize) % gameData.gridSize;
-            const worldY = (playerPos.y + dy + gameData.gridSize) % gameData.gridSize;
-            const cellIndex = worldY * gameData.gridSize + worldX;
-            
-            const terrainType = gameData.terrainMap[cellIndex];
-            const terrainColor = gameData.terrainColors[terrainType]?.color || '#e8e8e8';
-            
-            const isPlayer = dx === 0 && dy === 0;
-            cells.push(
-              <div 
-                key={\`\${dx}-\${dy}\`} 
-                className="cell"
-                style={{ backgroundColor: terrainColor }}
-              >
-                {isPlayer ? '♞' : ''}
-              </div>
-            );
+        
+        if (showFullMap) {
+          // Render entire map
+          for (let y = 0; y < gameData.gridSize; y++) {
+            for (let x = 0; x < gameData.gridSize; x++) {
+              const cellIndex = y * gameData.gridSize + x;
+              const terrainType = gameData.terrainMap[cellIndex];
+              const terrainColor = gameData.terrainColors[terrainType]?.color || '#e8e8e8';
+              const isPlayer = playerPos.x === x && playerPos.y === y;
+              
+              cells.push(
+                <div 
+                  key={\`\${x}-\${y}\`} 
+                  className="cell"
+                  style={{ backgroundColor: terrainColor, width: 30, height: 30, fontSize: 20 }}
+                >
+                  {isPlayer ? '♞' : ''}
+                </div>
+              );
+            }
+          }
+        } else {
+          // Render 5x5 viewport
+          for (let dy = -halfView; dy <= halfView; dy++) {
+            for (let dx = -halfView; dx <= halfView; dx++) {
+              // Wrap coordinates around the grid
+              const worldX = (playerPos.x + dx + gameData.gridSize) % gameData.gridSize;
+              const worldY = (playerPos.y + dy + gameData.gridSize) % gameData.gridSize;
+              const cellIndex = worldY * gameData.gridSize + worldX;
+              
+              const terrainType = gameData.terrainMap[cellIndex];
+              const terrainColor = gameData.terrainColors[terrainType]?.color || '#e8e8e8';
+              
+              const isPlayer = dx === 0 && dy === 0;
+              cells.push(
+                <div 
+                  key={\`\${dx}-\${dy}\`} 
+                  className="cell"
+                  style={{ backgroundColor: terrainColor }}
+                >
+                  {isPlayer ? '♞' : ''}
+                </div>
+              );
+            }
           }
         }
+        
         return cells;
       };
       
@@ -262,14 +296,14 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
               <div 
                 className="game-board" 
                 style={{
-                  gridTemplateColumns: \`repeat(5, 40px)\`
+                  gridTemplateColumns: \`repeat(\${showFullMap ? gameData.gridSize : 5}, \${showFullMap ? 30 : 40}px)\`
                 }}
               >
                 {renderBoard()}
               </div>
               
               <div style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
-                Use arrow keys to move ↑ ↓ ← →
+                Use arrow keys to move ↑ ↓ ← → | Press Q to view full map
               </div>
             </>
           )}
