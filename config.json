@@ -6,7 +6,8 @@
   "enemies": {
     "count": 3,
     "chaseDistance": 2,
-    "timePenaltyPerSecond": 20
+    "timePenaltyPerSecond": 20,
+    "chaseMoveProbability": 0.2
   },
   "terrain": {
     "grass": {

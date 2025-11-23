@@ -122,7 +122,15 @@ function App({ gameData }) {
         // Only move enemy if it's not on the same position as player
         const isOnPlayer = enemy.isAtPosition(player.position.x, player.position.y);
         if (!isOnPlayer) {
-          enemy.moveRandom(board);
+          // Decide whether to move towards player or randomly
+          const shouldChase = Math.random() < gameData.enemyConfig.chaseMoveProbability;
+          
+          if (shouldChase) {
+            enemy.moveTowards(player.position, board);
+          } else {
+            enemy.moveRandom(board);
+          }
+          
           // Check if enemy landed on player after move
           const nowCaught = enemy.isAtPosition(player.position.x, player.position.y);
           if (nowCaught) {
