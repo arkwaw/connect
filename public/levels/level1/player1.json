@@ -1,9 +1,0 @@
-[
-  {
-    "prompt": "(migrated) Single game placeholder",
-    "gridSize": 7,
-    "sequenceLength": 7,
-    "candidates": [],
-    "instruction": "Placeholder riddle — actual content served from /game.json"
-  }
-]
