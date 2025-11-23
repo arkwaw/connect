@@ -8,6 +8,7 @@ function App({ gameData }) {
   const [passwordInput, setPasswordInput] = useState('');
   const [gameWon, setGameWon] = useState(false);
   const [enemyOnPlayer, setEnemyOnPlayer] = useState(false);
+  const [smartphoneMode, setSmartphoneMode] = useState(false);
   
   const boardRef = useRef(null);
   const playerRef = useRef(null);
@@ -15,6 +16,16 @@ function App({ gameData }) {
   const inputHandlerRef = useRef(null);
   
   const [, forceUpdate] = useState({});
+  
+  // Detect smartphone mode
+  useEffect(() => {
+    const checkSmartphone = () => {
+      setSmartphoneMode(window.innerWidth <= 768);
+    };
+    checkSmartphone();
+    window.addEventListener('resize', checkSmartphone);
+    return () => window.removeEventListener('resize', checkSmartphone);
+  }, []);
   
   // Initialize game objects
   useEffect(() => {
@@ -42,6 +53,21 @@ function App({ gameData }) {
   const board = boardRef.current;
   const enemies = enemiesRef.current;
   const inputHandler = inputHandlerRef.current;
+  
+  // Edge tap handlers for smartphone mode
+  const handleEdgeTap = (e, direction) => {
+    if (!smartphoneMode || !inputHandler || !inputHandler.onMove) return;
+    e.preventDefault();
+    e.stopPropagation();
+    inputHandler.onMove(direction);
+  };
+  
+  const handleBoardTap = (e) => {
+    if (!smartphoneMode || !inputHandler || !inputHandler.onRevealPassword) return;
+    e.preventDefault();
+    e.stopPropagation();
+    inputHandler.onRevealPassword();
+  };
   
   // Setup input handlers
   useEffect(() => {
@@ -322,18 +348,39 @@ function App({ gameData }) {
                 </div>
               )}
           
-          <div 
-            className="game-board" 
-            style={{
-              gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, ${showFullMap ? 30 : 40}px)`
-            }}
-          >
-            {renderBoard()}
-          </div>
-          
-          <div style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
-            Use arrow keys to move ↑ ↓ ← → | Press Space to reveal password
-          </div>
+          {smartphoneMode ? (
+            <div className="game-container-smartphone">
+              <div className="edge-button edge-top" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowUp')} onClick={(e) => handleEdgeTap(e, 'ArrowUp')}>↑</div>
+              <div className="edge-button edge-left" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowLeft')} onClick={(e) => handleEdgeTap(e, 'ArrowLeft')}>←</div>
+              <div className="edge-button edge-right" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowRight')} onClick={(e) => handleEdgeTap(e, 'ArrowRight')}>→</div>
+              <div className="edge-button edge-bottom" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowDown')} onClick={(e) => handleEdgeTap(e, 'ArrowDown')}>↓</div>
+              <div 
+                className="game-board" 
+                style={{
+                  gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, ${showFullMap ? 30 : 40}px)`
+                }}
+                onTouchEnd={handleBoardTap}
+                onClick={handleBoardTap}
+              >
+                {renderBoard()}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div 
+                className="game-board" 
+                style={{
+                  gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, ${showFullMap ? 30 : 40}px)`
+                }}
+              >
+                {renderBoard()}
+              </div>
+              
+              <div style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
+                Use arrow keys to move ↑ ↓ ← → | Press Space to reveal password
+              </div>
+            </>
+          )}
           
           <div style={{ marginTop: 15 }}>
             <input 

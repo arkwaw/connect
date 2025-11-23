@@ -13,7 +13,7 @@ function generateHTML(gameData, config, currentPlayer, totalPlayers, word) {
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, maximum-scale=1" />
   <title>Connect Game</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
@@ -30,7 +30,7 @@ function generateHTML(gameData, config, currentPlayer, totalPlayers, word) {
   <script src="/js/EnemyPatrol.js"></script>
   <script src="/js/InputHandler.js"></script>
   
-  <script type="text/babel" src="/js/App.js?v=1"></script>
+  <script type="text/babel" src="/js/App.js?v=5"></script>
   <script type="text/babel">
     const gameData = {
       seed: '${hashedSeed}',

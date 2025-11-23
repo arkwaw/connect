@@ -85,3 +85,101 @@ h1 {
   border-radius: 6px;
   font-size: 14px;
 }
+
+.game-container-smartphone {
+  position: relative;
+  display: inline-block;
+  margin: 20px auto;
+}
+
+.edge-button {
+  position: absolute;
+  background: rgba(0, 123, 255, 0.1);
+  border: 2px solid rgba(0, 123, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 24px;
+  color: #007bff;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease;
+}
+
+.edge-button:active {
+  background: rgba(0, 123, 255, 0.3);
+}
+
+.edge-top {
+  top: -40px;
+  left: 0;
+  right: 0;
+  height: 40px;
+  border-radius: 8px 8px 0 0;
+}
+
+.edge-bottom {
+  bottom: -40px;
+  left: 0;
+  right: 0;
+  height: 40px;
+  border-radius: 0 0 8px 8px;
+}
+
+.edge-left {
+  left: -40px;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  border-radius: 8px 0 0 8px;
+}
+
+.edge-right {
+  right: -40px;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  border-radius: 0 8px 8px 0;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 20px;
+    max-width: 100%;
+  }
+  
+  .cell {
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
+  }
+  
+  .edge-button {
+    font-size: 20px;
+  }
+  
+  .edge-top, .edge-bottom {
+    height: 35px;
+  }
+  
+  .edge-left, .edge-right {
+    width: 35px;
+  }
+  
+  .edge-top {
+    top: -35px;
+  }
+  
+  .edge-bottom {
+    bottom: -35px;
+  }
+  
+  .edge-left {
+    left: -35px;
+  }
+  
+  .edge-right {
+    right: -35px;
+  }
+}
