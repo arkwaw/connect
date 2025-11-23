@@ -1,0 +1,8 @@
+[
+  {
+    "prompt": "Ten runes are laid out before you. Mark the four correct runes and press Confirm.",
+    "descriptiveObjects": [{},{},{},{},{},{},{},{},{},{}],
+    "instruction": "Select the four runes that your partner (player 2) indicates, then press Confirm.",
+    "sequenceLength": 4
+  }
+]

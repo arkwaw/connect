@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pair Riddle — Create</title>
+    <style>body{font-family:system-ui,Segoe UI,Arial;padding:24px;background:#f6f8fa} .card{max-width:720px;margin:24px auto;padding:24px;background:#fff;border-radius:8px} input{padding:8px}</style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Pair Riddle — Create Room</h1>
+      <p>Enter your name to create a link you can share with a friend. Both have 3 minutes to click "Ready" to start the game.</p>
+      <div>
+        <label>Your name: <input id="name" /></label>
+        <label style="margin-left:12px">Per-riddle time (seconds): <input id="time" type="number" value="180" style="width:90px" /></label>
+        <button id="create">Create Link</button>
+      </div>
+      <div id="result" style="margin-top:12px"></div>
+
+      <hr />
+      <p>Or open a test room directly:</p>
+      <a href="/room.html?room=room-test">Open test room</a>
+    </div>
+
+    <script>
+      document.getElementById('create').addEventListener('click', ()=>{
+        const name = (document.getElementById('name').value || '').trim();
+        const time = Number(document.getElementById('time').value) || 180;
+        if (!name) return alert('Enter name');
+        const createdAt = Date.now();
+        const seed = encodeURIComponent(btoa(`${name}:${createdAt}`));
+        const linkA = window.location.origin + '/room.html?seed=' + seed + '&player=player1&time=' + encodeURIComponent(time) + '&name=' + encodeURIComponent(name);
+        const linkB = window.location.origin + '/room.html?seed=' + seed + '&player=player2&time=' + encodeURIComponent(time) + '&name=' + encodeURIComponent(name);
+        const el = document.getElementById('result');
+        el.innerHTML = '<div>Share these links:</div>' +
+          '<div>Player A: <a href="' + linkA + '" target="_blank">' + linkA + '</a></div>' +
+          '<div>Player B: <a href="' + linkB + '" target="_blank">' + linkB + '</a></div>';
+      });
+    </script>
+  </body>
+</html>

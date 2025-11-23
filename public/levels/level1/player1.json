@@ -1,0 +1,17 @@
+[
+  {
+    "prompt": "You see a dreamlike portal surrounded by runes. Click the runes in the right order.",
+    "descriptiveObjects": [
+      { "id": "cell0" },{ "id": "cell1" },{ "id": "cell2" },{ "id": "cell3" },{ "id": "cell4" },{ "id": "cell5" },{ "id": "cell6" },
+      { "id": "cell7" },{ "id": "cell8" },{ "id": "cell9" },{ "id": "cell10" },{ "id": "cell11" },{ "id": "cell12" },{ "id": "cell13" },
+      { "id": "cell14" },{ "id": "cell15" },{ "id": "cell16" },{ "id": "cell17" },{ "id": "cell18" },{ "id": "cell19" },{ "id": "cell20" },
+      { "id": "cell21" },{ "id": "cell22" },{ "id": "cell23" },{ "id": "cell24" },{ "id": "cell25" },{ "id": "cell26" },{ "id": "cell27" },
+      { "id": "cell28" },{ "id": "cell29" },{ "id": "cell30" },{ "id": "cell31" },{ "id": "cell32" },{ "id": "cell33" },{ "id": "cell34" },
+      { "id": "cell35" },{ "id": "cell36" },{ "id": "cell37" },{ "id": "cell38" },{ "id": "cell39" },{ "id": "cell40" },{ "id": "cell41" },
+      { "id": "cell42" },{ "id": "cell43" },{ "id": "cell44" },{ "id": "cell45" },{ "id": "cell46" },{ "id": "cell47" },{ "id": "cell48" }
+    ],
+    "sequenceLength": 7,
+    "candidates": ["open","gate","enter","unlock","portal","door","begin","start","reveal","pass"],
+    "instruction": "Player 1: no answer input required for this riddle; reveal the password by clicking the runes."
+  }
+]
