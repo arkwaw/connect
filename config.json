@@ -1,5 +1,7 @@
 {
   "gridSize": 10,
+  "timerSeconds": 180,
+  "passwordRevealSeconds": 5,
   "terrain": {
     "grass": {
       "color": "#7bc96f",

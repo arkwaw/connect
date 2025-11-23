@@ -60,6 +60,33 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   const terrainData = JSON.stringify(terrainMap);
   const terrainColorsData = JSON.stringify(config.terrain);
   
+  // Generate unique passwords for each field per player
+  const passwordMap = {}; // { fieldIndex: { playerNum: password } }
+  for (let i = 0; i < config.gridSize * config.gridSize; i++) {
+    passwordMap[i] = {};
+    for (let p = 1; p <= totalPlayers; p++) {
+      const passSeed = crypto.createHash('sha256')
+        .update(`${hashedSeed}-field${i}-player${p}`)
+        .digest('hex');
+      // Generate 6-character password from hex
+      const password = passSeed.substring(0, 6).toUpperCase();
+      passwordMap[i][p] = password;
+    }
+  }
+  const passwordData = JSON.stringify(passwordMap);
+  
+  // Generate starting positions for each player
+  const startingPositions = {};
+  for (let p = 1; p <= totalPlayers; p++) {
+    const posSeed = crypto.createHash('sha256')
+      .update(`${hashedSeed}-startpos-player${p}`)
+      .digest('hex');
+    const xPos = parseInt(posSeed.substring(0, 8), 16) % config.gridSize;
+    const yPos = parseInt(posSeed.substring(8, 16), 16) % config.gridSize;
+    startingPositions[p] = { x: xPos, y: yPos };
+  }
+  const startingPosData = JSON.stringify(startingPositions);
+  
   // Send HTML with embedded data
   res.send(`
 <!DOCTYPE html>
@@ -155,8 +182,13 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
     
     function App() {
       const [gameStarted, setGameStarted] = useState(false);
-      const [playerPos, setPlayerPos] = useState({ x: 0, y: 0 });
+      const [playerPos, setPlayerPos] = useState(null);
       const [showFullMap, setShowFullMap] = useState(false);
+      const [timeRemaining, setTimeRemaining] = useState(null);
+      const [gameLost, setGameLost] = useState(false);
+      const [showPassword, setShowPassword] = useState(false);
+      const [passwordInput, setPasswordInput] = useState('');
+      const [gameWon, setGameWon] = useState(false);
       
       const gameData = {
         seed: '${hashedSeed}',
@@ -164,19 +196,42 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         totalPlayers: ${totalPlayers},
         word: '${word}',
         gridSize: ${config.gridSize},
+        timerSeconds: ${config.timerSeconds},
+        passwordRevealSeconds: ${config.passwordRevealSeconds},
         terrainMap: ${terrainData},
-        terrainColors: ${terrainColorsData}
+        terrainColors: ${terrainColorsData},
+        passwordMap: ${passwordData},
+        startingPositions: ${startingPosData}
       };
+      
+      // Initialize player position on mount
+      useEffect(() => {
+        if (!playerPos) {
+          const startPos = gameData.startingPositions[gameData.playerNum];
+          setPlayerPos({ x: startPos.x, y: startPos.y });
+        }
+      }, []);
       
       // Arrow key movement
       useEffect(() => {
-        if (!gameStarted) return;
+        if (!gameStarted || gameWon || !playerPos) return;
         
         const handleKeyDown = (e) => {
           // Q key to show full map
           if (e.key === 'q' || e.key === 'Q') {
             setShowFullMap(true);
             setTimeout(() => setShowFullMap(false), 3000);
+            e.preventDefault();
+            return;
+          }
+          
+          // Space key to reveal password
+          if (e.key === ' ') {
+            if (!showPassword) {
+              // Apply time penalty
+              setTimeRemaining(prev => Math.max(0, prev - gameData.passwordRevealSeconds));
+              setShowPassword(true);
+            }
             e.preventDefault();
             return;
           }
@@ -209,9 +264,58 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [gameStarted, gameData.gridSize]);
+      }, [gameStarted, gameWon, gameData.gridSize, gameData.passwordRevealSeconds, showPassword]);
+      
+      // Hide password when player moves
+      useEffect(() => {
+        if (playerPos) {
+          setShowPassword(false);
+        }
+      }, [playerPos?.x, playerPos?.y]);
+      
+      // Timer countdown
+      useEffect(() => {
+        if (!gameStarted || gameLost) return;
+        
+        setTimeRemaining(gameData.timerSeconds);
+        
+        const interval = setInterval(() => {
+          setTimeRemaining(prev => {
+            if (prev <= 1) {
+              setGameLost(true);
+              setGameStarted(false);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        
+        return () => clearInterval(interval);
+      }, [gameStarted, gameLost, gameData.timerSeconds]);
+      
+      const handlePasswordSubmit = () => {
+        const currentFieldIndex = playerPos.y * gameData.gridSize + playerPos.x;
+        // Check all other players' passwords for this field
+        for (let p = 1; p <= gameData.totalPlayers; p++) {
+          if (p !== gameData.playerNum) {
+            const expectedPassword = gameData.passwordMap[currentFieldIndex][p];
+            if (passwordInput.toUpperCase() === expectedPassword) {
+              setGameWon(true);
+              return;
+            }
+          }
+        }
+      };
+      
+      // Auto-check password on input change
+      useEffect(() => {
+        if (passwordInput && playerPos) {
+          handlePasswordSubmit();
+        }
+      }, [passwordInput]);
       
       const renderBoard = () => {
+        if (!playerPos) return null;
         const viewportSize = showFullMap ? gameData.gridSize : 5;
         const halfView = Math.floor(viewportSize / 2);
         
@@ -268,7 +372,6 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       
       return (
         <div className="container">
-          <h1>Connect Game</h1>
           
           {!gameStarted ? (
             <>
@@ -285,13 +388,56 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
                 Start Game
               </button>
             </>
+          ) : gameLost ? (
+            <>
+              <div style={{ marginTop: 20, color: 'red', fontSize: 24, fontWeight: 'bold' }}>
+                Time's Up! You Lost!
+              </div>
+              <button onClick={() => window.location.reload()} style={{ marginTop: 20 }}>
+                Try Again
+              </button>
+            </>
+          ) : gameWon ? (
+            <>
+              <div style={{ marginTop: 20, color: 'green', fontSize: 24, fontWeight: 'bold' }}>
+                You Win! 🎉
+              </div>
+              <div style={{ marginTop: 10, fontSize: 18 }}>
+                You found your teammate on the same field!
+              </div>
+              <button onClick={() => window.location.reload()} style={{ marginTop: 20 }}>
+                Play Again
+              </button>
+            </>
           ) : (
             <>
-              <div className="info-bar">
-                <span>Player {gameData.playerNum}/{gameData.totalPlayers}</span>
-                <span>Position: ({playerPos.x}, {playerPos.y})</span>
-                <span>Grid: {gameData.gridSize}x{gameData.gridSize}</span>
-              </div>
+              {playerPos && (
+                <>
+                  {showFullMap && (
+                    <div className="info-bar">
+                      <span>Player {gameData.playerNum}/{gameData.totalPlayers}</span>
+                      <span>Position: ({playerPos.x}, {playerPos.y})</span>
+                    </div>
+                  )}
+                  
+                  <div style={{ textAlign: 'center', fontSize: 18, fontWeight: 'bold', marginTop: 10, marginBottom: 10 }}>
+                    {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, '0')}
+                  </div>
+                  
+                  {showPassword && (
+                    <div style={{ 
+                      textAlign: 'center',
+                      marginTop: 10,
+                      marginBottom: 10
+                    }}>
+                      <div style={{ fontSize: 28, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 3 }}>
+                        {gameData.passwordMap[playerPos.y * gameData.gridSize + playerPos.x][gameData.playerNum]}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#666', marginTop: 5 }}>
+                        Visible until you move (-{gameData.passwordRevealSeconds}s penalty applied)
+                      </div>
+                    </div>
+                  )}
               
               <div 
                 className="game-board" 
@@ -303,8 +449,27 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
               </div>
               
               <div style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
-                Use arrow keys to move ↑ ↓ ← → | Press Q to view full map
+                Use arrow keys to move ↑ ↓ ← → | Press Space to reveal password
               </div>
+              
+              <div style={{ marginTop: 15 }}>
+                <input 
+                  type="text"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="passphrase"
+                  style={{ 
+                    padding: 6, 
+                    fontSize: 14, 
+                    fontFamily: 'monospace',
+                    textTransform: 'uppercase',
+                    width: 100,
+                    textAlign: 'center'
+                  }}
+                />
+              </div>
+                </>
+              )}
             </>
           )}
         </div>
