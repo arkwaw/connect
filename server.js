@@ -1,13 +1,14 @@
 const express = require('express');
-const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const GameDataGenerator = require('./gameDataGenerator');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Load config
 const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
+const gameDataGenerator = new GameDataGenerator(config);
 
 // Serve static files from public directory
 app.use(express.static('public'));
@@ -28,76 +29,15 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
     return res.status(400).send('Invalid player number');
   }
   
-  // Calculate seed: hash of (3-minute timestamp bucket + word)
-  const now = Date.now();
-  const bucket = Math.floor(now / (3 * 60 * 1000)); // 3-minute buckets
-  const seedString = `${bucket}-${word}`;
-  const hashedSeed = crypto.createHash('sha256').update(seedString).digest('hex');
+  // Generate game data
+  const gameData = gameDataGenerator.generateGameData(word, totalPlayers);
   
-  // Generate terrain map from seed
-  const terrainTypes = Object.keys(config.terrain);
-  const terrainWeights = terrainTypes.map(type => config.terrain[type].percentage);
-  const terrainColors = terrainTypes.map(type => config.terrain[type].color);
-  
-  // Create weighted array for terrain selection
-  const weightedTerrain = [];
-  terrainTypes.forEach((type, idx) => {
-    for (let i = 0; i < terrainWeights[idx]; i++) {
-      weightedTerrain.push(type);
-    }
-  });
-  
-  // Generate deterministic terrain for each cell
-  const terrainMap = [];
-  for (let i = 0; i < config.gridSize * config.gridSize; i++) {
-    const cellSeed = crypto.createHash('sha256')
-      .update(`${hashedSeed}-${i}`)
-      .digest('hex');
-    const index = parseInt(cellSeed.substring(0, 8), 16) % weightedTerrain.length;
-    terrainMap.push(weightedTerrain[index]);
-  }
-  
-  const terrainData = JSON.stringify(terrainMap);
-  const terrainColorsData = JSON.stringify(config.terrain);
-  
-  // Generate unique passwords for each field per player
-  const passwordMap = {}; // { fieldIndex: { playerNum: password } }
-  for (let i = 0; i < config.gridSize * config.gridSize; i++) {
-    passwordMap[i] = {};
-    for (let p = 1; p <= totalPlayers; p++) {
-      const passSeed = crypto.createHash('sha256')
-        .update(`${hashedSeed}-field${i}-player${p}`)
-        .digest('hex');
-      // Generate 6-character password from hex
-      const password = passSeed.substring(0, 6).toUpperCase();
-      passwordMap[i][p] = password;
-    }
-  }
-  const passwordData = JSON.stringify(passwordMap);
-  
-  // Generate starting positions for each player
-  const startingPositions = {};
-  for (let p = 1; p <= totalPlayers; p++) {
-    const posSeed = crypto.createHash('sha256')
-      .update(`${hashedSeed}-startpos-player${p}`)
-      .digest('hex');
-    const xPos = parseInt(posSeed.substring(0, 8), 16) % config.gridSize;
-    const yPos = parseInt(posSeed.substring(8, 16), 16) % config.gridSize;
-    startingPositions[p] = { x: xPos, y: yPos };
-  }
-  const startingPosData = JSON.stringify(startingPositions);
-  
-  // Generate enemy starting positions
-  const enemyStartPositions = [];
-  for (let e = 0; e < config.enemies.count; e++) {
-    const enemySeed = crypto.createHash('sha256')
-      .update(`${hashedSeed}-enemy${e}`)
-      .digest('hex');
-    const xPos = parseInt(enemySeed.substring(0, 8), 16) % config.gridSize;
-    const yPos = parseInt(enemySeed.substring(8, 16), 16) % config.gridSize;
-    enemyStartPositions.push({ x: xPos, y: yPos });
-  }
-  const enemyStartData = JSON.stringify(enemyStartPositions);
+  const terrainData = JSON.stringify(gameData.terrainMap);
+  const terrainColorsData = JSON.stringify(gameData.terrainColors);
+  const passwordData = JSON.stringify(gameData.passwordMap);
+  const startingPosData = JSON.stringify(gameData.startingPositions);
+  const enemyStartData = JSON.stringify(gameData.enemyStartPositions);
+  const hashedSeed = gameData.hashedSeed;
   
   // Send HTML with embedded data
   res.send(`
@@ -107,80 +47,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Connect Game</title>
-  <style>
-    body { 
-      font-family: system-ui, -apple-system, Arial, sans-serif; 
-      background: #f5f5f5; 
-      display: flex; 
-      justify-content: center; 
-      align-items: center; 
-      min-height: 100vh; 
-      margin: 0;
-    }
-    .container { 
-      background: white; 
-      padding: 40px; 
-      border-radius: 12px; 
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      text-align: center;
-      max-width: 800px;
-    }
-    .seed { 
-      font-family: monospace; 
-      background: #f0f0f0; 
-      padding: 12px; 
-      border-radius: 6px; 
-      margin: 20px 0;
-      word-break: break-all;
-      font-size: 14px;
-    }
-    .player-info {
-      font-size: 24px;
-      font-weight: bold;
-      margin: 20px 0;
-      color: #333;
-    }
-    button {
-      background: #007bff;
-      color: white;
-      border: none;
-      padding: 14px 32px;
-      font-size: 18px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 20px;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    h1 {
-      color: #333;
-      margin-top: 0;
-    }
-    .game-board {
-      display: inline-grid;
-      gap: 0;
-      margin: 20px auto;
-    }
-    .cell {
-      width: 40px;
-      height: 40px;
-      background: #e8e8e8;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-    }
-    .info-bar {
-      display: flex;
-      justify-content: space-between;
-      margin: 20px 0;
-      padding: 10px;
-      background: #f9f9f9;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-  </style>
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
   <div id="root"></div>
