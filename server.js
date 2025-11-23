@@ -87,6 +87,18 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   }
   const startingPosData = JSON.stringify(startingPositions);
   
+  // Generate enemy starting positions
+  const enemyStartPositions = [];
+  for (let e = 0; e < config.enemies.count; e++) {
+    const enemySeed = crypto.createHash('sha256')
+      .update(`${hashedSeed}-enemy${e}`)
+      .digest('hex');
+    const xPos = parseInt(enemySeed.substring(0, 8), 16) % config.gridSize;
+    const yPos = parseInt(enemySeed.substring(8, 16), 16) % config.gridSize;
+    enemyStartPositions.push({ x: xPos, y: yPos });
+  }
+  const enemyStartData = JSON.stringify(enemyStartPositions);
+  
   // Send HTML with embedded data
   res.send(`
 <!DOCTYPE html>
@@ -178,18 +190,158 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
+    
+    // ===== Game Classes =====
+    
+    class Board {
+      constructor(gridSize, terrainMap, terrainColors, passwordMap) {
+        this.gridSize = gridSize;
+        this.terrainMap = terrainMap;
+        this.terrainColors = terrainColors;
+        this.passwordMap = passwordMap;
+      }
+      
+      getTerrainType(x, y) {
+        const index = y * this.gridSize + x;
+        return this.terrainMap[index];
+      }
+      
+      getTerrainColor(x, y) {
+        const terrainType = this.getTerrainType(x, y);
+        return this.terrainColors[terrainType]?.color || '#e8e8e8';
+      }
+      
+      getPassword(x, y, playerNum) {
+        const index = y * this.gridSize + x;
+        return this.passwordMap[index]?.[playerNum] || '';
+      }
+      
+      wrapCoordinate(coord) {
+        return (coord + this.gridSize) % this.gridSize;
+      }
+    }
+    
+    class Player {
+      constructor(playerNum, startPos, texture = '♞') {
+        this.playerNum = playerNum;
+        this.position = { ...startPos };
+        this.texture = texture;
+        this.timeRemaining = null;
+        this.collectedPassphrases = [];
+      }
+      
+      moveTo(x, y, board) {
+        this.position.x = board.wrapCoordinate(x);
+        this.position.y = board.wrapCoordinate(y);
+      }
+      
+      move(dx, dy, board) {
+        this.moveTo(this.position.x + dx, this.position.y + dy, board);
+      }
+      
+      hasCollectedFrom(playerNum) {
+        return this.collectedPassphrases.includes(playerNum);
+      }
+      
+      collectPassphrase(playerNum) {
+        if (!this.hasCollectedFrom(playerNum)) {
+          this.collectedPassphrases.push(playerNum);
+        }
+      }
+    }
+    
+    class EnemyPatrol {
+      constructor(id, startPos, texturePatrol = '♟', textureChasing = '♜') {
+        this.id = id;
+        this.position = { ...startPos };
+        this.texturePatrol = texturePatrol;
+        this.textureChasing = textureChasing;
+        this.isChasing = false;
+      }
+      
+      getTexture() {
+        return this.isChasing ? this.textureChasing : this.texturePatrol;
+      }
+      
+      calculateDistance(playerPos, board) {
+        const dx = Math.min(
+          Math.abs(this.position.x - playerPos.x),
+          board.gridSize - Math.abs(this.position.x - playerPos.x)
+        );
+        const dy = Math.min(
+          Math.abs(this.position.y - playerPos.y),
+          board.gridSize - Math.abs(this.position.y - playerPos.y)
+        );
+        return dx + dy; // Manhattan distance
+      }
+      
+      updateChaseState(playerPos, board, chaseDistance) {
+        const distance = this.calculateDistance(playerPos, board);
+        this.isChasing = distance <= chaseDistance;
+      }
+      
+      moveTowards(playerPos, board) {
+        const dx = Math.min(
+          Math.abs(this.position.x - playerPos.x),
+          board.gridSize - Math.abs(this.position.x - playerPos.x)
+        );
+        const dy = Math.min(
+          Math.abs(this.position.y - playerPos.y),
+          board.gridSize - Math.abs(this.position.y - playerPos.y)
+        );
+        
+        if (dx > dy) {
+          // Move horizontally towards player
+          if ((playerPos.x > this.position.x && dx === Math.abs(playerPos.x - this.position.x)) ||
+              (playerPos.x < this.position.x && dx !== Math.abs(playerPos.x - this.position.x))) {
+            this.position.x = board.wrapCoordinate(this.position.x + 1);
+          } else {
+            this.position.x = board.wrapCoordinate(this.position.x - 1);
+          }
+        } else {
+          // Move vertically towards player
+          if ((playerPos.y > this.position.y && dy === Math.abs(playerPos.y - this.position.y)) ||
+              (playerPos.y < this.position.y && dy !== Math.abs(playerPos.y - this.position.y))) {
+            this.position.y = board.wrapCoordinate(this.position.y + 1);
+          } else {
+            this.position.y = board.wrapCoordinate(this.position.y - 1);
+          }
+        }
+      }
+      
+      moveRandom(board) {
+        const dir = Math.floor(Math.random() * 4);
+        switch(dir) {
+          case 0: this.position.y = board.wrapCoordinate(this.position.y - 1); break;
+          case 1: this.position.y = board.wrapCoordinate(this.position.y + 1); break;
+          case 2: this.position.x = board.wrapCoordinate(this.position.x - 1); break;
+          case 3: this.position.x = board.wrapCoordinate(this.position.x + 1); break;
+        }
+      }
+      
+      isAtPosition(x, y) {
+        return this.position.x === x && this.position.y === y;
+      }
+    }
+    
+    // ===== Main App Component =====
     
     function App() {
       const [gameStarted, setGameStarted] = useState(false);
-      const [playerPos, setPlayerPos] = useState(null);
       const [showFullMap, setShowFullMap] = useState(false);
-      const [timeRemaining, setTimeRemaining] = useState(null);
       const [gameLost, setGameLost] = useState(false);
       const [showPassword, setShowPassword] = useState(false);
       const [passwordInput, setPasswordInput] = useState('');
       const [gameWon, setGameWon] = useState(false);
-      const [collectedPassphrases, setCollectedPassphrases] = useState([]);
+      
+      const boardRef = useRef(null);
+      const playerRef = useRef(null);
+      const enemiesRef = useRef([]);
+      
+      const [, forceUpdate] = useState({});
+      const keysPressed = useRef(new Set());
+      const moveIntervalRef = useRef(null);
       
       const gameData = {
         seed: '${hashedSeed}',
@@ -199,23 +351,42 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         gridSize: ${config.gridSize},
         timerSeconds: ${config.timerSeconds},
         passwordRevealSeconds: ${config.passwordRevealSeconds},
+        moveDelayMs: ${config.moveDelayMs},
         terrainMap: ${terrainData},
         terrainColors: ${terrainColorsData},
         passwordMap: ${passwordData},
-        startingPositions: ${startingPosData}
+        startingPositions: ${startingPosData},
+        enemyStartPositions: ${enemyStartData},
+        enemyConfig: ${JSON.stringify(config.enemies)}
       };
       
-      // Initialize player position on mount
+      // Initialize game objects
       useEffect(() => {
-        if (!playerPos) {
-          const startPos = gameData.startingPositions[gameData.playerNum];
-          setPlayerPos({ x: startPos.x, y: startPos.y });
-        }
+        boardRef.current = new Board(
+          gameData.gridSize,
+          gameData.terrainMap,
+          gameData.terrainColors,
+          gameData.passwordMap
+        );
+        
+        const startPos = gameData.startingPositions[gameData.playerNum];
+        playerRef.current = new Player(gameData.playerNum, startPos);
+        playerRef.current.timeRemaining = gameData.timerSeconds;
+        
+        enemiesRef.current = gameData.enemyStartPositions.map((pos, idx) => 
+          new EnemyPatrol(idx, pos)
+        );
+        
+        forceUpdate({});
       }, []);
       
-      // Arrow key movement
+      const player = playerRef.current;
+      const board = boardRef.current;
+      const enemies = enemiesRef.current;
+      
+      // Arrow key movement with consistent timing
       useEffect(() => {
-        if (!gameStarted || gameWon || !playerPos) return;
+        if (!gameStarted || gameWon || !player) return;
         
         const handleKeyDown = (e) => {
           // Q key to show full map
@@ -230,85 +401,145 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
           if (e.key === ' ') {
             if (!showPassword) {
               // Apply time penalty
-              setTimeRemaining(prev => Math.max(0, prev - gameData.passwordRevealSeconds));
+              player.timeRemaining = Math.max(0, player.timeRemaining - gameData.passwordRevealSeconds);
               setShowPassword(true);
+              forceUpdate({});
             }
             e.preventDefault();
             return;
           }
           
-          setPlayerPos(prev => {
-            let newPos = { ...prev };
-            
-            switch(e.key) {
-              case 'ArrowUp':
-                newPos.y = (prev.y - 1 + gameData.gridSize) % gameData.gridSize;
-                e.preventDefault();
-                break;
-              case 'ArrowDown':
-                newPos.y = (prev.y + 1) % gameData.gridSize;
-                e.preventDefault();
-                break;
-              case 'ArrowLeft':
-                newPos.x = (prev.x - 1 + gameData.gridSize) % gameData.gridSize;
-                e.preventDefault();
-                break;
-              case 'ArrowRight':
-                newPos.x = (prev.x + 1) % gameData.gridSize;
-                e.preventDefault();
-                break;
-            }
-            
-            return newPos;
-          });
+          // Track arrow key presses
+          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            keysPressed.current.add(e.key);
+            e.preventDefault();
+          }
+        };
+        
+        const handleKeyUp = (e) => {
+          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            keysPressed.current.delete(e.key);
+          }
         };
         
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [gameStarted, gameWon, gameData.gridSize, gameData.passwordRevealSeconds, showPassword]);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          window.removeEventListener('keyup', handleKeyUp);
+        };
+      }, [gameStarted, gameWon, gameData.passwordRevealSeconds, showPassword]);
+      
+      // Process movement at consistent intervals
+      useEffect(() => {
+        if (!gameStarted || gameWon || gameLost || !player || !board) {
+          if (moveIntervalRef.current) {
+            clearInterval(moveIntervalRef.current);
+            moveIntervalRef.current = null;
+          }
+          return;
+        }
+        
+        moveIntervalRef.current = setInterval(() => {
+          if (keysPressed.current.size === 0) return;
+          
+          // Get the most recently pressed key (last in the set)
+          const keys = Array.from(keysPressed.current);
+          const key = keys[keys.length - 1];
+          
+          switch(key) {
+            case 'ArrowUp':
+              player.move(0, -1, board);
+              break;
+            case 'ArrowDown':
+              player.move(0, 1, board);
+              break;
+            case 'ArrowLeft':
+              player.move(-1, 0, board);
+              break;
+            case 'ArrowRight':
+              player.move(1, 0, board);
+              break;
+          }
+          
+          forceUpdate({});
+        }, gameData.moveDelayMs);
+        
+        return () => {
+          if (moveIntervalRef.current) {
+            clearInterval(moveIntervalRef.current);
+            moveIntervalRef.current = null;
+          }
+        };
+      }, [gameStarted, gameWon, gameLost, player, gameData.moveDelayMs]);
       
       // Hide password when player moves
       useEffect(() => {
-        if (playerPos) {
+        if (player) {
           setShowPassword(false);
         }
-      }, [playerPos?.x, playerPos?.y]);
+      }, [player?.position.x, player?.position.y]);
       
       // Timer countdown
       useEffect(() => {
-        if (!gameStarted || gameLost) return;
-        
-        setTimeRemaining(gameData.timerSeconds);
+        if (!gameStarted || gameLost || !player) return;
         
         const interval = setInterval(() => {
-          setTimeRemaining(prev => {
-            if (prev <= 1) {
-              setGameLost(true);
-              setGameStarted(false);
-              return 0;
-            }
-            return prev - 1;
-          });
+          player.timeRemaining -= 1;
+          if (player.timeRemaining <= 0) {
+            player.timeRemaining = 0;
+            setGameLost(true);
+            setGameStarted(false);
+          }
+          forceUpdate({});
         }, 1000);
         
         return () => clearInterval(interval);
-      }, [gameStarted, gameLost, gameData.timerSeconds]);
+      }, [gameStarted, gameLost]);
+      
+      // Enemy movement and time penalty
+      useEffect(() => {
+        if (!gameStarted || gameLost || gameWon || !player || !board || enemies.length === 0) return;
+        
+        const interval = setInterval(() => {
+          enemies.forEach(enemy => {
+            enemy.updateChaseState(player.position, board, 2);
+            
+            if (enemy.isChasing) {
+              enemy.moveTowards(player.position, board);
+            } else {
+              enemy.moveRandom(board);
+            }
+          });
+          
+          // Apply time penalty if enemy on same field as player
+          const enemyOnPlayer = enemies.some(e => e.isAtPosition(player.position.x, player.position.y));
+          if (enemyOnPlayer) {
+            player.timeRemaining = Math.max(0, player.timeRemaining - gameData.enemyConfig.timePenaltyPerSecond);
+          }
+          
+          forceUpdate({});
+        }, 1000);
+        
+        return () => clearInterval(interval);
+      }, [gameStarted, gameLost, gameWon, player, board, gameData.enemyConfig]);
       
       const handlePasswordSubmit = () => {
-        const currentFieldIndex = playerPos.y * gameData.gridSize + playerPos.x;
+        if (!player || !board) return;
+        
         // Check all other players' passwords for this field
         for (let p = 1; p <= gameData.totalPlayers; p++) {
-          if (p !== gameData.playerNum && !collectedPassphrases.includes(p)) {
-            const expectedPassword = gameData.passwordMap[currentFieldIndex][p];
+          if (p !== gameData.playerNum && !player.hasCollectedFrom(p)) {
+            const expectedPassword = board.getPassword(player.position.x, player.position.y, p);
             if (passwordInput.toUpperCase() === expectedPassword) {
-              const newCollected = [...collectedPassphrases, p];
-              setCollectedPassphrases(newCollected);
+              player.collectPassphrase(p);
               setPasswordInput('');
               
               // Win if collected all other players' passphrases
-              if (newCollected.length >= gameData.totalPlayers - 1) {
+              if (player.collectedPassphrases.length >= gameData.totalPlayers - 1) {
                 setGameWon(true);
               }
+              forceUpdate({});
               return;
             }
           }
@@ -323,7 +554,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       }, [passwordInput]);
       
       const renderBoard = () => {
-        if (!playerPos) return null;
+        if (!player || !board) return null;
         const viewportSize = showFullMap ? gameData.gridSize : 5;
         const halfView = Math.floor(viewportSize / 2);
         
@@ -333,10 +564,9 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
           // Render entire map
           for (let y = 0; y < gameData.gridSize; y++) {
             for (let x = 0; x < gameData.gridSize; x++) {
-              const cellIndex = y * gameData.gridSize + x;
-              const terrainType = gameData.terrainMap[cellIndex];
-              const terrainColor = gameData.terrainColors[terrainType]?.color || '#e8e8e8';
-              const isPlayer = playerPos.x === x && playerPos.y === y;
+              const terrainColor = board.getTerrainColor(x, y);
+              const isPlayer = player.position.x === x && player.position.y === y;
+              const enemyHere = enemies.find(e => e.isAtPosition(x, y));
               
               cells.push(
                 <div 
@@ -344,7 +574,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
                   className="cell"
                   style={{ backgroundColor: terrainColor, width: 30, height: 30, fontSize: 20 }}
                 >
-                  {isPlayer ? '♞' : ''}
+                  {isPlayer ? player.texture : enemyHere ? enemyHere.getTexture() : ''}
                 </div>
               );
             }
@@ -354,21 +584,20 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
           for (let dy = -halfView; dy <= halfView; dy++) {
             for (let dx = -halfView; dx <= halfView; dx++) {
               // Wrap coordinates around the grid
-              const worldX = (playerPos.x + dx + gameData.gridSize) % gameData.gridSize;
-              const worldY = (playerPos.y + dy + gameData.gridSize) % gameData.gridSize;
-              const cellIndex = worldY * gameData.gridSize + worldX;
+              const worldX = board.wrapCoordinate(player.position.x + dx);
+              const worldY = board.wrapCoordinate(player.position.y + dy);
               
-              const terrainType = gameData.terrainMap[cellIndex];
-              const terrainColor = gameData.terrainColors[terrainType]?.color || '#e8e8e8';
-              
+              const terrainColor = board.getTerrainColor(worldX, worldY);
               const isPlayer = dx === 0 && dy === 0;
+              const enemyHere = enemies.find(e => e.isAtPosition(worldX, worldY));
+              
               cells.push(
                 <div 
                   key={\`\${dx}-\${dy}\`} 
                   className="cell"
                   style={{ backgroundColor: terrainColor }}
                 >
-                  {isPlayer ? '♞' : ''}
+                  {isPlayer ? player.texture : enemyHere ? enemyHere.getTexture() : ''}
                 </div>
               );
             }
@@ -419,22 +648,29 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
             </>
           ) : (
             <>
-              {playerPos && (
+              {player && (
                 <>
                   {showFullMap && (
                     <div className="info-bar">
                       <span>Player {gameData.playerNum}/{gameData.totalPlayers}</span>
-                      <span>Position: ({playerPos.x}, {playerPos.y})</span>
+                      <span>Position: ({player.position.x}, {player.position.y})</span>
                     </div>
                   )}
                   
-                  <div style={{ textAlign: 'center', fontSize: 18, fontWeight: 'bold', marginTop: 10, marginBottom: 10 }}>
-                    {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, '0')}
+                  <div style={{ 
+                    textAlign: 'center', 
+                    fontSize: 18, 
+                    fontWeight: 'bold', 
+                    marginTop: 10, 
+                    marginBottom: 10,
+                    color: player.timeRemaining <= 30 ? 'red' : 'black'
+                  }}>
+                    {Math.floor(player.timeRemaining / 60)}:{String(player.timeRemaining % 60).padStart(2, '0')}
                   </div>
                   
-                  {collectedPassphrases.length > 0 && (
+                  {player.collectedPassphrases.length > 0 && (
                     <div style={{ textAlign: 'center', fontSize: 12, color: '#28a745', marginBottom: 5 }}>
-                      Collected: {collectedPassphrases.length}/{gameData.totalPlayers - 1}
+                      Collected: {player.collectedPassphrases.length}/{gameData.totalPlayers - 1}
                     </div>
                   )}
                   
@@ -445,7 +681,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
                       marginBottom: 10
                     }}>
                       <div style={{ fontSize: 28, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 3 }}>
-                        {gameData.passwordMap[playerPos.y * gameData.gridSize + playerPos.x][gameData.playerNum]}
+                        {board.getPassword(player.position.x, player.position.y, gameData.playerNum)}
                       </div>
                       <div style={{ fontSize: 12, color: '#666', marginTop: 5 }}>
                         Visible until you move (-{gameData.passwordRevealSeconds}s penalty applied)
@@ -499,5 +735,5 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`Try: http://localhost:${PORT}/4/testgame/1`);
+  console.log(`Try: http://localhost:${PORT}/2/testgame/1`);
 });

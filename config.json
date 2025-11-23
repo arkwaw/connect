@@ -2,6 +2,12 @@
   "gridSize": 10,
   "timerSeconds": 180,
   "passwordRevealSeconds": 5,
+  "moveDelayMs": 250,
+  "enemies": {
+    "count": 3,
+    "chaseDistance": 2,
+    "timePenaltyPerSecond": 20
+  },
   "terrain": {
     "grass": {
       "color": "#7bc96f",
