@@ -44,7 +44,8 @@
         const playerParam = params.get('player') || 'player1';
         const nameParam = params.get('name') || '';
         const timeParam = Number(params.get('time')) || 180;
-        const levelId = 'level1';
+        const gameJsonPath = '/game.json';
+        const logicPath = '/logic.js';
         const themeParam = params.get('theme') || 'rune';
 
         const [name, setName] = useState(nameParam);
@@ -64,11 +65,10 @@
         // load level files
         const [levelData, setLevelData] = useState(null);
         useEffect(()=>{
-          fetch(`/levels/${levelId}/player1.json`).then(r=>r.json()).then(p1=>{
-            fetch(`/levels/${levelId}/player2.json`).then(r=>r.json()).then(p2=>{
-              setLevelData({ player1: p1, player2: p2 });
-            });
-          });
+          fetch(gameJsonPath).then(r=>r.json()).then(g=>{
+            // game.json contains { player1: [...], player2: [...] }
+            setLevelData({ player1: g.player1 || [], player2: g.player2 || [] });
+          }).catch(()=>{});
         }, []);
 
         // load level-specific logic script and let it prepare generated data
@@ -80,7 +80,7 @@
           if (!levelData) return;
           // load the level logic script from the level folder
           const script = document.createElement('script');
-          script.src = `/levels/${levelId}/logic.js`;
+          script.src = logicPath;
           script.async = true;
           script.onload = () => { setLevelLogic(window.levelLogic || null); };
           document.body.appendChild(script);
@@ -90,8 +90,7 @@
         useEffect(()=>{
           if (!levelLogic || !seedParam || !levelData || !themes) return;
           const seed = decodeURIComponent(seedParam);
-          const themeList = (themes && themes[themeParam]) || [];
-          const gen = levelLogic.prepare({ seed, levelData: levelData.player1, themeList, round });
+          const gen = levelLogic.prepare({ seed, levelData: levelData.player1, themes, theme: themeParam, round });
           setGeneratedData(gen);
         }, [levelLogic, seedParam, levelData, themes, themeParam, round]);
 
@@ -109,10 +108,14 @@
           // if player2, craft hint based on generated data
           if (playerParam === 'player2') {
             const expected = (generatedData && ((generatedData.expectedSequences && generatedData.expectedSequences[idx]) || (generatedData.expectedIndices && (generatedData.expectedIndices[idx] || generatedData.expectedIndices)))) || [];
-            const objsDef = (levelData.player1[idx].descriptiveObjects || levelData.player1[idx].runes || []);
             const themeList = (themes && themes[themeParam]) || [];
-            const runeLabels = objsDef.map((r, i) => {
-              if (r && r.label) return r.label;
+            // determine grid size for this riddle (generatedData preferred, then riddle JSON gridSize, then default)
+            const gridSizeForHint = (generatedData && generatedData.gridSizes && generatedData.gridSizes[idx]) || (levelData.player1[idx].gridSize) || 7;
+            const objCountForHint = gridSizeForHint * gridSizeForHint;
+            // build rune labels fallback array of length objCountForHint
+            const runeLabels = Array.from({length: objCountForHint}, (_, i) => {
+              const fromGen = (generatedData && generatedData.labelsPerRiddle && generatedData.labelsPerRiddle[idx] && generatedData.labelsPerRiddle[idx][i]) || (generatedData && generatedData.labelsPerRiddlePlayer2 && generatedData.labelsPerRiddlePlayer2[idx] && generatedData.labelsPerRiddlePlayer2[idx][i]);
+              if (fromGen) return fromGen;
               if (levelData.player1[idx].emoji && levelData.player1[idx].emoji[i]) return levelData.player1[idx].emoji[i];
               if (themeList && themeList[i]) return themeList[i];
               return `#${i+1}`;
@@ -310,23 +313,23 @@
         
             {status === 'ready' && (
               <div style={{marginTop:12}}>
-                <button onClick={()=>startRiddle(0)}>Start Game</button>
-                <div style={{marginTop:8}}>Per-riddle time: {timeParam}s (from link)</div>
-              </div>
+                  <button onClick={()=>startRiddle(0)} disabled={!(levelData && levelData.player1 && levelData.player1.length)}>Start Game</button>
+                  <div style={{marginTop:8}}>Per-riddle time: {timeParam}s (from link)</div>
+                </div>
             )}
 
             {(status === 'playing' || status === 'lost' || status === 'finished') && (
               <div style={{marginTop:12}}>
-                <div><strong>Riddle #{riddleIndex+1}</strong></div>
-                <div><strong>Time left:</strong> {timerRemaining !== null ? `${timerRemaining}s` : '—'}</div>
+                
                 {playerParam === 'player1' ? (
                   riddleContent && (
                     <div>
                       {(() => {
-                          const allObjs = (riddleContent.descriptiveObjects || riddleContent.runes || []).slice();
-                          // gridSize is provided by generatedData (prepare) or inferred
-                          const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || Math.sqrt(allObjs.length) || 7;
-                          const objs = allObjs.slice(0, gridSize * gridSize);
+                          // gridSize: prefer generatedData, then riddle JSON gridSize, then infer from descriptiveObjects length, then default
+                          const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || (riddleContent.gridSize) || Math.sqrt((riddleContent.descriptiveObjects || riddleContent.runes || []).length) || 7;
+                          const objCount = gridSize * gridSize;
+                          const allSource = (riddleContent.descriptiveObjects || riddleContent.runes) || [];
+                          const objs = Array.from({length: objCount}, (_,i) => allSource[i] || null);
                           const themeList = (themes && themes[themeParam]) || [];
                           const emojiList = (riddleContent.emoji && riddleContent.emoji.length) ? riddleContent.emoji : themeList;
                           const boardClass = 'board grid';
@@ -376,7 +379,7 @@
                                     const mismatchIdx = (generatedData && generatedData.mismatchIndices && generatedData.mismatchIndices[riddleIndex] !== undefined) ? generatedData.mismatchIndices[riddleIndex] : null;
                                     const isExpectedOriginal = isCorrect || (mismatchIdx !== null && mismatchIdx === i);
                                     // detect label mismatch between player1 and player2 views for this cell
-                                    const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || Math.sqrt((riddleContent.descriptiveObjects || riddleContent.runes || []).length) || 7;
+                                    // reuse gridSize from outer scope
                                     const label1 = computeLabelFor('player1', riddleIndex, i, gridSize);
                                     const label2 = computeLabelFor('player2', riddleIndex, i, gridSize);
                                     const isMismatch = (label1 !== null && label2 !== null && String(label1) !== String(label2));
@@ -384,25 +387,27 @@
                                     return (<div key={i} className={cls} onClick={()=>onRuneClick(i)}>{label}</div>);
                                   })}
                                 </div>
-                                <div>Sequence: {sequence.join(',')}</div>
-                                <div style={{marginTop:6,fontSize:12,color:'#333'}}>Selected: {sequence.length}{(generatedData && generatedData.confirmRequired) ? ` / ${requiredCount}` : ''}</div>
+                                
                               </div>
                             </div>
                           </div>
                         );
                       })()}
                       <div style={{marginTop:8}}>
-                        {!(playerParam === 'player1' && levelId === 'level1') && (
+                        {!(playerParam === 'player1') && (
                           <button onClick={resetSequence}>Reset Sequence</button>
                         )}
                         {showPassword && (
-                          <span style={{marginLeft:12}}>
-                            <strong>Password:</strong> {(generatedData && ((generatedData.chosenAnswers && generatedData.chosenAnswers[riddleIndex]) || generatedData.chosenAnswers))}
-                            <button onClick={continueNext} style={{marginLeft:12}}>Continue</button>
-                          </span>
+                          <div style={{marginTop:8,textAlign:'center'}}>
+                            <div><strong>Password</strong></div>
+                            <div style={{marginTop:6}}>{(generatedData && ((generatedData.chosenAnswers && generatedData.chosenAnswers[riddleIndex]) || generatedData.chosenAnswers))}</div>
+                            <div style={{marginTop:8}}>
+                              <button onClick={continueNext}>Continue</button>
+                            </div>
+                          </div>
                         )}
                         {/* Confirm button for selection-based levels (hidden for player1 level1) */}
-                        {(generatedData && generatedData.confirmRequired && !(playerParam === 'player1' && levelId === 'level1')) && (
+                        {(generatedData && generatedData.confirmRequired && !(playerParam === 'player1')) && (
                           <button onClick={confirmSelection} style={{marginLeft:12}}>Confirm</button>
                         )}
                       </div>
@@ -415,9 +420,10 @@
                       {/* show objects grid for player2 and highlight expected ones */}
                       {generatedData ? (
                         (() => {
-                          const allObjs = (levelData.player1[riddleIndex].descriptiveObjects || levelData.player1[riddleIndex].runes || []).slice();
-                          const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || Math.sqrt(allObjs.length) || 7;
-                          const objs = allObjs.slice(0, gridSize * gridSize);
+                          const gridSize = (generatedData && generatedData.gridSizes && generatedData.gridSizes[riddleIndex]) || (levelData.player1[riddleIndex].gridSize) || Math.sqrt(((levelData.player1[riddleIndex].descriptiveObjects || levelData.player1[riddleIndex].runes) || []).length) || 7;
+                          const objCount = gridSize * gridSize;
+                          const allSource = (levelData.player1[riddleIndex].descriptiveObjects || levelData.player1[riddleIndex].runes) || [];
+                          const objs = Array.from({length: objCount}, (_,i) => allSource[i] || null);
                           const themeList = (themes && themes[themeParam]) || [];
                           const emojiList = (levelData.player1[riddleIndex].emoji && levelData.player1[riddleIndex].emoji.length) ? levelData.player1[riddleIndex].emoji : themeList;
                           const colorMap = (generatedData.colorMaps && generatedData.colorMaps[riddleIndex]) || [];
@@ -436,24 +442,30 @@
                           );
                         })()
                         ) : (
-                        <div className="board grid">{(riddleContent.descriptiveObjects || riddleContent.runes || []).map((r,i)=> (
-                          <div key={i} className="rune">{(r && r.label) || '?'}</div>
-                        ))}</div>
+                        (() => {
+                          const gridSize = (riddleContent && ((riddleContent.gridSize) || Math.sqrt((riddleContent.descriptiveObjects || riddleContent.runes || []).length))) || 7;
+                          const objCount = gridSize * gridSize;
+                          const allSource = (riddleContent.descriptiveObjects || riddleContent.runes) || [];
+                          return (<div className="board grid" style={{gridTemplateColumns: `repeat(${gridSize},60px)`, gridAutoRows: '60px'}}>{Array.from({length: objCount}, (_,i)=> (
+                            <div key={i} className="rune">{(allSource[i] && allSource[i].label) || '?'}</div>
+                          ))}</div>);
+                        })()
                       )}
                     </div>
                   )
                 )}
 
+                <div style={{marginTop:8,textAlign:'center',fontSize:18}}>{timerRemaining !== null ? `${timerRemaining}s` : '—'}</div>
                 <div style={{marginTop:12}}>
                   {!(playerParam === 'player1' && riddleContent && riddleContent.sequenceLength) ? (
                     <span>
                       {playerParam === 'player2' ? (
                         // Player 2: controlled password input + Continue button (requires correct password)
-                        <span>
-                          <label>Password: <input value={passwordInput} onChange={e=>setPasswordInput(e.target.value)} /></label>
+                        <div style={{textAlign:'center'}}>
+                          <label style={{display:'block',marginBottom:6}}>Password <input value={passwordInput} onChange={e=>setPasswordInput(e.target.value)} /></label>
                           <button
                             onClick={()=>submitAnswer(passwordInput)}
-                            style={{marginLeft:8}}
+                            style={{}}
                             disabled={!(() => {
                               const val = (passwordInput || '').trim().toLowerCase();
                               if (!val) return false;
@@ -462,7 +474,7 @@
                               return expectedAnswer && val === String(expectedAnswer).toLowerCase();
                             })()}
                           >Continue</button>
-                        </span>
+                        </div>
                       ) : (
                         <span>
                           <label>Answer: <input ref={answerRef} /></label>

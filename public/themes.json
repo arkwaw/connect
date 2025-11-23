@@ -1,4 +1,19 @@
 {
   "rune": ["ᚠ","ᚢ","ᚦ","ᚨ","ᚱ","ᚲ","ᚷ","ᚹ","ᚺ","ᚾ"],
-  "fun": ["😀","🎲","🎯","🌟","🔥","🍀","🔔","⚡","🍎","🚀"]
+  "fun": ["😀","🎲","🎯","🌟","🔥","🍀","🔔","⚡","🍎","🚀"],
+  "passwords": {
+    "fun": [
+      "jablko","pilka","kot","pies","slonce","gwiazda","ciasto","ksiazka","drzewo","ptak",
+      "ryba","kapelusz","auto","autobus","krowa","kaczka","lew","mis","krolik","gumka",
+      "mysz","klucz","drzwi","statek","latawiec","krzeslo","stol","materac","skarpetka","but",
+      "jajko","mleko","cukierek","ciasteczko","placek","syrop","winogrono","cytrus","brzoskwinia","malina",
+      "jagoda","muszla","chmura","deszcz","snieg","lisc","kwiat","trawa","kamien","gora",
+      "rzeka","jezioro","wzgorze","droga","pociag","ciezarowka","samolot","rakieta","pacynka","lalka",
+      "robot","balon","swieca","okno","lampa","zegar","zegarek","pedzel","farba","kredka",
+      "olowek","papier","znaczek","mapa","rekawiczka","szalik","kurtka","koc","kanapka","banan",
+      "platki","dzem","lyzka","widelec","talerz","kubek","miska","lodowka","ogrod","piknik",
+      "impreza","muzyka","taniec","piosenka","smiech","usmiech","zabawka","puzzle","kulka","patyk"
+    ],
+    "rune": null
+  }
 }
