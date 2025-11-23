@@ -319,13 +319,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
         
         const interval = setInterval(() => {
           enemies.forEach(enemy => {
-            enemy.updateChaseState(player.position, board, 2);
-            
-            if (enemy.isChasing) {
-              enemy.moveTowards(player.position, board);
-            } else {
-              enemy.moveRandom(board);
-            }
+            enemy.moveRandom(board);
           });
           
           // Apply time penalty if enemy on same field as player
@@ -364,7 +358,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
       
       // Auto-check password on input change
       useEffect(() => {
-        if (passwordInput && playerPos) {
+        if (passwordInput && player) {
           handlePasswordSubmit();
         }
       }, [passwordInput]);
@@ -390,7 +384,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
                   className="cell"
                   style={{ backgroundColor: terrainColor, width: 30, height: 30, fontSize: 20 }}
                 >
-                  {isPlayer ? player.texture : enemyHere ? enemyHere.getTexture() : ''}
+                  {isPlayer ? player.texture : enemyHere ? enemyHere.texturePatrol : ''}
                 </div>
               );
             }
@@ -413,7 +407,7 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
                   className="cell"
                   style={{ backgroundColor: terrainColor }}
                 >
-                  {isPlayer ? player.texture : enemyHere ? enemyHere.getTexture() : ''}
+                  {isPlayer ? player.texture : enemyHere ? enemyHere.texturePatrol : ''}
                 </div>
               );
             }
