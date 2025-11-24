@@ -95,8 +95,7 @@ function App({ gameData }) {
     inputHandler.setGameActive(true);
     
     inputHandler.onShowFullMap = () => {
-      setShowFullMap(true);
-      setTimeout(() => setShowFullMap(false), 3000);
+      setShowFullMap(prev => !prev);
     };
     
     inputHandler.onRevealPassword = () => {
@@ -303,7 +302,28 @@ function App({ gameData }) {
   return (
     <div className="container">
       
-      {!gameStarted ? (
+      {gameLost ? (
+        <>
+          <div style={{ marginTop: 20, color: 'red', fontSize: 24, fontWeight: 'bold' }}>
+            Time's Up! You Lost!
+          </div>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 20 }}>
+            Try Again
+          </button>
+        </>
+      ) : gameWon ? (
+        <>
+          <div style={{ marginTop: 20, color: 'green', fontSize: 24, fontWeight: 'bold' }}>
+            You Win! 🎉
+          </div>
+          <div style={{ marginTop: 10, fontSize: 18 }}>
+            You collected all {gameData.totalPlayers - 1} passphrases!
+          </div>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 20 }}>
+            Play Again
+          </button>
+        </>
+      ) : !gameStarted ? (
         <>
           {showFullMap && (
             <div className="seed">
@@ -345,36 +365,19 @@ function App({ gameData }) {
             Start Game
           </button>
         </>
-      ) : gameLost ? (
-        <>
-          <div style={{ marginTop: 20, color: 'red', fontSize: 24, fontWeight: 'bold' }}>
-            Time's Up! You Lost!
-          </div>
-          <button onClick={() => window.location.reload()} style={{ marginTop: 20 }}>
-            Try Again
-          </button>
-        </>
-      ) : gameWon ? (
-        <>
-          <div style={{ marginTop: 20, color: 'green', fontSize: 24, fontWeight: 'bold' }}>
-            You Win! 🎉
-          </div>
-          <div style={{ marginTop: 10, fontSize: 18 }}>
-            You collected all {gameData.totalPlayers - 1} passphrases!
-          </div>
-          <button onClick={() => window.location.reload()} style={{ marginTop: 20 }}>
-            Play Again
-          </button>
-        </>
       ) : (
         <>
           {player && (
             <>
               {showFullMap && (
                 <div className="info-bar">
-                  <span>Player {gameData.playerNum}/{gameData.totalPlayers}</span>
-                  <span>Position: ({player.position.x}, {player.position.y})</span>
-                  <span style={{ fontSize: '10px', color: '#999' }}>Seed: {gameData.seed.substring(0, 12)}...</span>
+                  <div>
+                    <span>Player {gameData.playerNum}/{gameData.totalPlayers}</span>
+                    <span style={{ marginLeft: '20px' }}>Position: ({player.position.x}, {player.position.y})</span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#999', marginTop: '5px' }}>
+                    Seed: {gameData.seed}
+                  </div>
                 </div>
               )}
               
