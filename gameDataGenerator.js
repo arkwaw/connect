@@ -7,7 +7,7 @@ class GameDataGenerator {
 
   generateSeed(word) {
     const now = Date.now();
-    const bucket = Math.floor(now / (3 * 60 * 1000)); // 3-minute buckets
+    const bucket = Math.floor(now / (30 * 1000)); // 30-second buckets
     const seedString = `${bucket}-${word}`;
     return crypto.createHash('sha256').update(seedString).digest('hex');
   }
