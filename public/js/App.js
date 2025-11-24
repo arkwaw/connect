@@ -377,6 +377,28 @@ function App({ gameData }) {
                   <span style={{ fontSize: '10px', color: '#999' }}>Seed: {gameData.seed.substring(0, 12)}...</span>
                 </div>
               )}
+              
+              {showFullMap && board && (
+                <div style={{ 
+                  textAlign: 'center',
+                  fontSize: '14px',
+                  fontFamily: 'monospace',
+                  color: '#333',
+                  marginTop: '10px',
+                  marginBottom: '10px',
+                  padding: '8px',
+                  background: '#f0f0f0',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc'
+                }}>
+                  <div><strong>All passwords for this field:</strong></div>
+                  <div style={{ marginTop: '5px', fontSize: '16px', fontWeight: 'bold' }}>{
+                    Array.from({ length: gameData.totalPlayers }, (_, i) => i + 1)
+                      .map(p => board.getPassword(player.position.x, player.position.y, p))
+                      .join(', ')
+                  }</div>
+                </div>
+              )}
           
           {smartphoneMode ? (
             <>
@@ -424,13 +446,18 @@ function App({ gameData }) {
             </>
           ) : (
             <>
-              <div 
-                className="game-board" 
-                style={{
-                  gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, ${showFullMap ? 30 : 40}px)`
-                }}
-              >
-                {renderBoard()}
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <div className="collected-counter">
+                  {player.collectedPassphrases.length}/{gameData.totalPlayers - 1}
+                </div>
+                <div 
+                  className="game-board" 
+                  style={{
+                    gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, ${showFullMap ? 30 : 40}px)`
+                  }}
+                >
+                  {renderBoard()}
+                </div>
               </div>
               
               <div style={{ marginTop: 5 }}>
