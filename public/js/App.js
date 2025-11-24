@@ -14,6 +14,7 @@ function App({ gameData }) {
   const playerRef = useRef(null);
   const enemiesRef = useRef([]);
   const inputHandlerRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
   
   const [, forceUpdate] = useState({});
   
@@ -54,6 +55,24 @@ function App({ gameData }) {
   const enemies = enemiesRef.current;
   const inputHandler = inputHandlerRef.current;
   
+  // Handle typing timeout to restore timer
+  const handlePasswordInputChange = (e) => {
+    const value = e.target.value;
+    setPasswordInput(value);
+    
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set new timeout to clear input after 1 second of inactivity
+    if (value) {
+      typingTimeoutRef.current = setTimeout(() => {
+        setPasswordInput('');
+      }, 1000);
+    }
+  };
+  
   // Edge tap handlers for smartphone mode
   const handleEdgeTap = (e, direction) => {
     if (!smartphoneMode || !inputHandler || !inputHandler.onMove) return;
@@ -84,6 +103,21 @@ function App({ gameData }) {
       if (!showPassword) {
         player.applyTimePenalty(gameData.passwordRevealSeconds);
         setShowPassword(true);
+        
+        // Clear any existing timeout
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        
+        // Show password in input field
+        const password = board.getPassword(player.position.x, player.position.y, gameData.playerNum);
+        setPasswordInput(password);
+        
+        // Clear password from input after 3 seconds
+        typingTimeoutRef.current = setTimeout(() => {
+          setPasswordInput('');
+        }, 3000);
+        
         forceUpdate({});
       }
     };
@@ -186,7 +220,7 @@ function App({ gameData }) {
     for (let p = 1; p <= gameData.totalPlayers; p++) {
       if (p !== gameData.playerNum && !player.hasCollectedFrom(p)) {
         const expectedPassword = board.getPassword(player.position.x, player.position.y, p);
-        if (passwordInput.toUpperCase() === expectedPassword) {
+        if (passwordInput.toLowerCase() === expectedPassword) {
           player.collectPassphrase(p);
           setPasswordInput('');
           
@@ -271,13 +305,40 @@ function App({ gameData }) {
       
       {!gameStarted ? (
         <>
-          <div className="seed">
-            <strong>Seed:</strong><br/>
-            {gameData.seed}
-          </div>
+          {showFullMap && (
+            <div className="seed">
+              <strong>Seed:</strong><br/>
+              {gameData.seed}
+            </div>
+          )}
           
           <div className="player-info">
             Player {gameData.playerNum} of {gameData.totalPlayers}
+          </div>
+          
+          <div style={{ 
+            margin: '20px auto', 
+            maxWidth: '400px', 
+            textAlign: 'left', 
+            fontSize: '14px', 
+            lineHeight: '1.6',
+            color: '#555'
+          }}>
+            <strong>How to play:</strong>
+            <ul style={{ paddingLeft: '20px', marginTop: '10px' }}>
+              <li>Find a field that's easy to describe to others</li>
+              {smartphoneMode ? (
+                <li>Tap the board to reveal your passphrase</li>
+              ) : (
+                <li>Press Space to reveal your passphrase</li>
+              )}
+              <li>Share the passphrase and location with other players</li>
+              <li>Go to their locations and enter their passphrases</li>
+              <li>Collect all {gameData.totalPlayers - 1} passphrases to win!</li>
+            </ul>
+            <div style={{ fontSize: '12px', color: '#999', marginTop: '10px' }}>
+              (Avoid enemy patrols)
+            </div>
           </div>
           
           <button onClick={() => setGameStarted(true)}>
@@ -313,58 +374,54 @@ function App({ gameData }) {
                 <div className="info-bar">
                   <span>Player {gameData.playerNum}/{gameData.totalPlayers}</span>
                   <span>Position: ({player.position.x}, {player.position.y})</span>
-                </div>
-              )}
-              
-              <div style={{ 
-                textAlign: 'center', 
-                fontSize: 18, 
-                fontWeight: 'bold', 
-                marginTop: 10, 
-                marginBottom: 10,
-                color: player.timeRemaining <= 30 ? 'red' : 'black'
-              }}>
-                {Math.floor(player.timeRemaining / 60)}:{String(player.timeRemaining % 60).padStart(2, '0')}
-              </div>
-              
-              {player.collectedPassphrases.length > 0 && (
-                <div style={{ textAlign: 'center', fontSize: 12, color: '#28a745', marginBottom: 5 }}>
-                  Collected: {player.collectedPassphrases.length}/{gameData.totalPlayers - 1}
-                </div>
-              )}
-              
-              {showPassword && (
-                <div style={{ 
-                  textAlign: 'center',
-                  marginTop: 10,
-                  marginBottom: 10
-                }}>
-                  <div style={{ fontSize: 28, fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: 3 }}>
-                    {board.getPassword(player.position.x, player.position.y, gameData.playerNum)}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#666', marginTop: 5 }}>
-                    Visible until you move (-{gameData.passwordRevealSeconds}s penalty applied)
-                  </div>
+                  <span style={{ fontSize: '10px', color: '#999' }}>Seed: {gameData.seed.substring(0, 12)}...</span>
                 </div>
               )}
           
           {smartphoneMode ? (
-            <div className="game-container-smartphone">
-              <div className="edge-button edge-top" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowUp')} onClick={(e) => handleEdgeTap(e, 'ArrowUp')}>↑</div>
-              <div className="edge-button edge-left" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowLeft')} onClick={(e) => handleEdgeTap(e, 'ArrowLeft')}>←</div>
-              <div className="edge-button edge-right" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowRight')} onClick={(e) => handleEdgeTap(e, 'ArrowRight')}>→</div>
-              <div className="edge-button edge-bottom" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowDown')} onClick={(e) => handleEdgeTap(e, 'ArrowDown')}>↓</div>
-              <div 
-                className="game-board" 
-                style={{
-                  gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, 30px)`
-                }}
-                onTouchEnd={handleBoardTap}
-                onClick={handleBoardTap}
-              >
-                {renderBoard()}
+            <>
+              <div className="game-container-smartphone">
+                <div className="edge-button edge-top" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowUp')} onClick={(e) => handleEdgeTap(e, 'ArrowUp')}>↑</div>
+                <div className="edge-button edge-left" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowLeft')} onClick={(e) => handleEdgeTap(e, 'ArrowLeft')}>←</div>
+                <div className="edge-button edge-right" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowRight')} onClick={(e) => handleEdgeTap(e, 'ArrowRight')}>→</div>
+                <div className="collected-counter">
+                  {player.collectedPassphrases.length}/{gameData.totalPlayers - 1}
+                </div>
+                <div 
+                  className="game-board" 
+                  style={{
+                    gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, 30px)`
+                  }}
+                  onTouchEnd={handleBoardTap}
+                  onClick={handleBoardTap}
+                >
+                  {renderBoard()}
+                </div>
               </div>
-            </div>
+              
+              <div style={{ marginTop: 5, marginBottom: 10 }}>
+                <input 
+                  type="text"
+                  value={passwordInput}
+                  onChange={handlePasswordInputChange}
+                  placeholder={`${Math.floor(player.timeRemaining / 60)}:${String(player.timeRemaining % 60).padStart(2, '0')}`}
+                  maxLength="3"
+                  style={{ 
+                    padding: 8, 
+                    fontSize: 16, 
+                    fontFamily: 'monospace',
+                    width: 80,
+                    textAlign: 'center',
+                    border: '2px solid #ccc',
+                    borderRadius: '4px'
+                  }}
+                />
+              </div>
+              
+              <div className="edge-button-bottom-container">
+                <div className="edge-button edge-bottom" onTouchEnd={(e) => handleEdgeTap(e, 'ArrowDown')} onClick={(e) => handleEdgeTap(e, 'ArrowDown')}>↓</div>
+              </div>
+            </>
           ) : (
             <>
               <div 
@@ -376,30 +433,26 @@ function App({ gameData }) {
                 {renderBoard()}
               </div>
               
-              <div style={{ marginTop: 10, color: '#666', fontSize: 14 }}>
-                Use arrow keys to move ↑ ↓ ← → | Press Space to reveal password
+              <div style={{ marginTop: 5 }}>
+                <input 
+                  type="text"
+                  value={passwordInput}
+                  onChange={handlePasswordInputChange}
+                  placeholder={`${Math.floor(player.timeRemaining / 60)}:${String(player.timeRemaining % 60).padStart(2, '0')}`}
+                  maxLength="3"
+                  style={{ 
+                    padding: 8, 
+                    fontSize: 16, 
+                    fontFamily: 'monospace',
+                    width: 80,
+                    textAlign: 'center',
+                    border: '2px solid #ccc',
+                    borderRadius: '4px'
+                  }}
+                />
               </div>
             </>
           )}
-          
-          <div style={{ marginTop: 10 }}>
-            <input 
-              type="text"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              placeholder="passphrase"
-              maxLength="3"
-              style={{ 
-                padding: 8, 
-                fontSize: 16, 
-                fontFamily: 'monospace',
-                width: 80,
-                textAlign: 'center',
-                border: '2px solid #ccc',
-                borderRadius: '4px'
-              }}
-            />
-          </div>
             </>
           )}
         </>

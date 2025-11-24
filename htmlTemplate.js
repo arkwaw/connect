@@ -30,7 +30,7 @@ function generateHTML(gameData, config, currentPlayer, totalPlayers, word) {
   <script src="/js/EnemyPatrol.js"></script>
   <script src="/js/InputHandler.js"></script>
   
-  <script type="text/babel" src="/js/App.js?v=8"></script>
+  <script type="text/babel" src="/js/App.js?v=19"></script>
   <script type="text/babel">
     const gameData = {
       seed: '${hashedSeed}',

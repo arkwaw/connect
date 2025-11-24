@@ -92,55 +92,92 @@ h1 {
   margin: 20px auto;
 }
 
+.collected-counter {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #28a745;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 10;
+}
+
 .edge-button {
   position: absolute;
-  background: rgba(0, 123, 255, 0.1);
-  border: 2px solid rgba(0, 123, 255, 0.3);
+  background: transparent;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 24px;
-  color: #007bff;
+  font-size: 28px;
+  color: rgba(0, 0, 0, 0.3);
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.2s ease;
+  transition: color 0.2s ease, transform 0.1s ease;
 }
 
 .edge-button:active {
-  background: rgba(0, 123, 255, 0.3);
+  color: rgba(0, 0, 0, 0.6);
+  transform: scale(1.2);
 }
 
 .edge-top {
-  top: -40px;
-  left: 0;
-  right: 0;
-  height: 40px;
-  border-radius: 8px 8px 0 0;
+  top: -45px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 45px;
+}
+
+.edge-top:active {
+  transform: translateX(-50%) scale(1.2);
 }
 
 .edge-bottom {
-  bottom: -40px;
-  left: 0;
-  right: 0;
-  height: 40px;
-  border-radius: 0 0 8px 8px;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 45px;
+}
+
+.edge-bottom:active {
+  transform: translateX(-50%) scale(1.2);
+}
+
+.edge-button-bottom-container {
+  position: relative;
+  height: 45px;
+  margin-top: 5px;
 }
 
 .edge-left {
-  left: -40px;
-  top: 0;
-  bottom: 0;
-  width: 40px;
-  border-radius: 8px 0 0 8px;
+  left: -45px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 45px;
+  height: 50px;
+}
+
+.edge-left:active {
+  transform: translateY(-50%) scale(1.2);
 }
 
 .edge-right {
-  right: -40px;
-  top: 0;
-  bottom: 0;
-  width: 40px;
-  border-radius: 0 8px 8px 0;
+  right: -45px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 45px;
+  height: 50px;
+}
+
+.edge-right:active {
+  transform: translateY(-50%) scale(1.2);
 }
 
 @media (max-width: 768px) {
@@ -156,30 +193,6 @@ h1 {
   }
   
   .edge-button {
-    font-size: 20px;
-  }
-  
-  .edge-top, .edge-bottom {
-    height: 35px;
-  }
-  
-  .edge-left, .edge-right {
-    width: 35px;
-  }
-  
-  .edge-top {
-    top: -35px;
-  }
-  
-  .edge-bottom {
-    bottom: -35px;
-  }
-  
-  .edge-left {
-    left: -35px;
-  }
-  
-  .edge-right {
-    right: -35px;
+    font-size: 24px;
   }
 }
