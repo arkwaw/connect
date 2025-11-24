@@ -364,6 +364,12 @@ function App({ gameData }) {
           <button onClick={() => setGameStarted(true)}>
             Start Game
           </button>
+          <button 
+            className="settings-btn"
+            onClick={() => window.location.href = '/index.html'}
+          >
+            Settings
+          </button>
         </>
       ) : (
         <>

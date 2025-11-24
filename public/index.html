@@ -160,9 +160,6 @@
 </head>
 <body>
   <div class="container">
-    <h1>Connect Game</h1>
-    <div class="subtitle">Setup your game</div>
-    
     <div class="input-group">
       <label for="gameWord">Game Word</label>
       <input 
@@ -185,6 +182,42 @@
       />
     </div>
     
+    <div class="slider-group">
+      <label>Grid Size</label>
+      <div class="slider-value" id="gridSize">10x10</div>
+      <input 
+        type="range" 
+        id="gridSlider" 
+        min="0" 
+        max="2" 
+        value="0"
+      />
+    </div>
+    
+    <div class="slider-group">
+      <label>Enemies</label>
+      <div class="slider-value" id="enemyCount">3</div>
+      <input 
+        type="range" 
+        id="enemySlider" 
+        min="0" 
+        max="2" 
+        value="1"
+      />
+    </div>
+    
+    <div class="slider-group">
+      <label>Time Limit</label>
+      <div class="slider-value" id="timeLimit">3 min</div>
+      <input 
+        type="range" 
+        id="timeSlider" 
+        min="0" 
+        max="2" 
+        value="1"
+      />
+    </div>
+    
     <div class="player-buttons">
       <button class="player-btn" id="player1" data-player="1">Player 1</button>
       <button class="player-btn" id="player2" data-player="2">Player 2</button>
@@ -198,13 +231,23 @@
   </div>
   
   <script>
-    const slider = document.getElementById('playerSlider');
+    const playerSlider = document.getElementById('playerSlider');
+    const gridSlider = document.getElementById('gridSlider');
+    const enemySlider = document.getElementById('enemySlider');
+    const timeSlider = document.getElementById('timeSlider');
     const playerCountDisplay = document.getElementById('playerCount');
+    const gridSizeDisplay = document.getElementById('gridSize');
+    const enemyCountDisplay = document.getElementById('enemyCount');
+    const timeLimitDisplay = document.getElementById('timeLimit');
     const gameWordInput = document.getElementById('gameWord');
     const playerButtons = document.querySelectorAll('.player-btn');
     
+    const gridSizes = [10, 15, 20];
+    const enemyCounts = [0, 3, 6];
+    const timeLimits = [60, 180, 360];
+    
     // Update player count and button states
-    slider.addEventListener('input', (e) => {
+    playerSlider.addEventListener('input', (e) => {
       const count = parseInt(e.target.value);
       playerCountDisplay.textContent = count;
       
@@ -214,16 +257,39 @@
       });
     });
     
+    // Update grid size display
+    gridSlider.addEventListener('input', (e) => {
+      const index = parseInt(e.target.value);
+      const size = gridSizes[index];
+      gridSizeDisplay.textContent = `${size}x${size}`;
+    });
+    
+    // Update enemy count display
+    enemySlider.addEventListener('input', (e) => {
+      const index = parseInt(e.target.value);
+      enemyCountDisplay.textContent = enemyCounts[index];
+    });
+    
+    // Update time limit display
+    timeSlider.addEventListener('input', (e) => {
+      const index = parseInt(e.target.value);
+      const minutes = timeLimits[index] / 60;
+      timeLimitDisplay.textContent = `${minutes} min`;
+    });
+    
     // Handle player button clicks
     playerButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         if (!btn.disabled) {
           const playerNum = btn.dataset.player;
-          const numPlayers = slider.value;
+          const numPlayers = playerSlider.value;
+          const gridSize = gridSizes[parseInt(gridSlider.value)];
+          const enemyCount = enemyCounts[parseInt(enemySlider.value)];
+          const timeLimit = timeLimits[parseInt(timeSlider.value)];
           const word = gameWordInput.value.trim() || 'testgame';
           
-          // Navigate to game URL
-          window.location.href = `/${numPlayers}/${word}/${playerNum}`;
+          // Navigate to game URL with query parameters
+          window.location.href = `/${numPlayers}/${word}/${playerNum}?grid=${gridSize}&enemies=${enemyCount}&time=${timeLimit}`;
         }
       });
     });

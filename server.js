@@ -17,10 +17,14 @@ app.use(express.static('public'));
 // Handle the game URL pattern: /<numPlayers>/<word>/<playerNum>
 app.get('/:numPlayers/:word/:playerNum', (req, res) => {
   const { numPlayers, word, playerNum } = req.params;
+  const { grid, enemies, time } = req.query;
   
   // Validate parameters
   const totalPlayers = parseInt(numPlayers);
   const currentPlayer = parseInt(playerNum);
+  const gridSize = parseInt(grid) || config.gridSize;
+  const enemyCount = parseInt(enemies) !== undefined ? parseInt(enemies) : config.enemies.count;
+  const timerSeconds = parseInt(time) || config.timerSeconds;
   
   if (isNaN(totalPlayers) || totalPlayers <= 0) {
     return res.status(400).send('Invalid number of players');
@@ -30,11 +34,23 @@ app.get('/:numPlayers/:word/:playerNum', (req, res) => {
     return res.status(400).send('Invalid player number');
   }
   
-  // Generate game data
-  const gameData = gameDataGenerator.generateGameData(word, totalPlayers);
+  // Override config for this game
+  const gameConfig = {
+    ...config,
+    gridSize: gridSize,
+    timerSeconds: timerSeconds,
+    enemies: {
+      ...config.enemies,
+      count: enemyCount
+    }
+  };
+  
+  // Generate game data with custom config
+  const customGenerator = new GameDataGenerator(gameConfig);
+  const gameData = customGenerator.generateGameData(word, totalPlayers);
   
   // Send HTML with game data
-  res.send(generateHTML(gameData, config, currentPlayer, totalPlayers, word));
+  res.send(generateHTML(gameData, gameConfig, currentPlayer, totalPlayers, word));
 });
 
 app.listen(PORT, () => {
