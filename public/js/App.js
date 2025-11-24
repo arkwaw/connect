@@ -357,7 +357,7 @@ function App({ gameData }) {
               <div 
                 className="game-board" 
                 style={{
-                  gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, ${showFullMap ? 30 : 40}px)`
+                  gridTemplateColumns: `repeat(${showFullMap ? gameData.gridSize : 5}, 30px)`
                 }}
                 onTouchEnd={handleBoardTap}
                 onClick={handleBoardTap}
@@ -382,19 +382,21 @@ function App({ gameData }) {
             </>
           )}
           
-          <div style={{ marginTop: 15 }}>
+          <div style={{ marginTop: 10 }}>
             <input 
               type="text"
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
               placeholder="passphrase"
+              maxLength="3"
               style={{ 
-                padding: 6, 
-                fontSize: 14, 
+                padding: 8, 
+                fontSize: 16, 
                 fontFamily: 'monospace',
-                textTransform: 'uppercase',
-                width: 100,
-                textAlign: 'center'
+                width: 80,
+                textAlign: 'center',
+                border: '2px solid #ccc',
+                borderRadius: '4px'
               }}
             />
           </div>

@@ -45,8 +45,12 @@ class GameDataGenerator {
         const passSeed = crypto.createHash('sha256')
           .update(`${hashedSeed}-field${i}-player${p}`)
           .digest('hex');
-        // Generate 6-character password from hex
-        const password = passSeed.substring(0, 6).toUpperCase();
+        // Generate 3 lowercase letters (a-z)
+        const password = passSeed.substring(0, 6)
+          .split('')
+          .map(c => String.fromCharCode(97 + (parseInt(c, 16) % 26)))
+          .join('')
+          .substring(0, 3);
         passwordMap[i][p] = password;
       }
     }
